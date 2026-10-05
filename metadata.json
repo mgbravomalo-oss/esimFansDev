@@ -1,0 +1,8 @@
+{
+  "name": "eSIM Global",
+  "description": "Plataforma de conectividad eSIM internacional, gestión de perfiles de datos y códigos QR de activación para viajeros.",
+  "requestFramePermissions": [
+    "identity-credentials-get"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

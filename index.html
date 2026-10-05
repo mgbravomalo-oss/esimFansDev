@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // En entornos de previsualización aislados (sandbox / iframe), Vite HMR no utiliza websockets persistentes.
+      // Este capturador evita que las desconexiones benignas de WebSocket muestren avisos no deseados de 'Unhandled Rejection'.
+      (function() {
+        function isWsError(err) {
+          if (!err) return false;
+          var str = typeof err === 'string' ? err : (err.message || (err.reason && err.reason.message) || err.toString() || '');
+          return /websocket|closed without opened|failed to connect to websocket|\[vite\].*connecting|\[vite\].*failed/i.test(str);
+        }
+        window.addEventListener('unhandledrejection', function(event) {
+          if (isWsError(event.reason)) {
+            event.preventDefault();
+            if (typeof event.stopImmediatePropagation === 'function') {
+              event.stopImmediatePropagation();
+            }
+          }
+        }, true);
+        window.addEventListener('error', function(event) {
+          if (isWsError(event.message) || (event.error && isWsError(event.error))) {
+            event.preventDefault();
+            if (typeof event.stopImmediatePropagation === 'function') {
+              event.stopImmediatePropagation();
+            }
+          }
+        }, true);
+        var origWarn = console.warn;
+        var origError = console.error;
+        console.warn = function() {
+          var msg = Array.prototype.slice.call(arguments).map(function(a) { return typeof a === 'string' ? a : (a && a.message) || ''; }).join(' ');
+          if (isWsError(msg)) return;
+          origWarn.apply(console, arguments);
+        };
+        console.error = function() {
+          var msg = Array.prototype.slice.call(arguments).map(function(a) { return typeof a === 'string' ? a : (a && a.message) || ''; }).join(' ');
+          if (isWsError(msg)) return;
+          origError.apply(console, arguments);
+        };
+      })();
+    </script>
+    <title>eSIM Global - Planes de Datos y Códigos QR de Conectividad</title>
+    <meta name="description" content="Plataforma de conectividad eSIM internacional, gestión de perfiles de datos y códigos QR de activación para viajeros." />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="eSIM Global" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:title" content="eSIM Global - Planes de Datos y Códigos QR de Conectividad" />
+    <meta property="og:description" content="Plataforma de conectividad eSIM internacional, gestión de perfiles de datos y códigos QR de activación para viajeros." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Google Identity Services (GSI) Client Library -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+  </head>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased font-sans transition-colors duration-200">
+    <script>
+      (function() {
+        try {
+          const theme = localStorage.getItem('esim_app_theme');
+          if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.colorScheme = 'dark';
+          } else {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.style.colorScheme = 'light';
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

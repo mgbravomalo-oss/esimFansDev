@@ -1,0 +1,16 @@
+{
+  "name": "esimfans",
+  "main": "./src/index.js",          // ← add this
+  "compatibility_date": "2024-04-01",
+  "assets": {
+    "directory": "./public/",        // your existing assets directory
+    "binding": "ASSETS"               // ← add this so env.ASSETS works
+  },
+  "secrets_store_secrets": [         // ← now you can add bindings
+    {
+      "binding": "MY_SECRET",
+      "store_id": "3e4c85eccd9b41b18f86a714f2ded7b2",
+      "secret_name": "my-secret"
+    }
+  ]
+}

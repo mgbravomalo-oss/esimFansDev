@@ -1,0 +1,45 @@
+# This file instructs gcloud to ignore certain directories/files
+# during the upload phase for Google Cloud Build/Run.
+
+# Ignore git folder
+.git/
+.gitignore
+
+# Ignore node modules
+node_modules/
+**/node_modules/
+
+# Ignore local environment variables
+.env
+.env.local
+.env.*.local
+.env.production
+.env.local.production
+.env.txt
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore IDE configs
+.idea/
+.vscode/
+
+# Ignore build outputs
+dist/
+build/
+.next/
+out/
+.vercel/
+
+# Ignore mobile subprojects not needed for Cloud Run server deployment
+flutter_app/
+react_native_app/
+
+# Ignore lockfiles and temporary cache
+package-lock.json
+bun.lock
+pnpm-lock.yaml
+yarn.lock
+.npm/
+.eslintcache

@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.github
+.vscode
+.idea
+*.log
+.env*
+flutter_app
+react_native_app
+checkpoint-backup
