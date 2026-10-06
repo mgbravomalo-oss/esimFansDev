@@ -188,6 +188,83 @@ export function setCachedPlansForCountry(countryCode: string, plans: EsimPlan[])
 }
 
 /**
+ * In-flight prefetch promises map to prevent duplicate requests
+ */
+const inFlightPrefetches = new Map<string, Promise<EsimPlan[] | null>>();
+
+/**
+ * Prefetches and caches plans for a country in the background.
+ * Safe, deduplicated, and silent: joins in-flight requests and avoids duplicate network hits.
+ */
+export async function prefetchPlansForCountry(countryCode: string): Promise<EsimPlan[] | null> {
+  if (!countryCode) return null;
+  const key = countryCode.toUpperCase().trim();
+
+  // 1. If already cached and valid, return immediately
+  const existing = getCachedPlansForCountry(key);
+  if (existing && existing.length > 0) {
+    return existing;
+  }
+
+  // 2. If a prefetch is already in flight for this country, join it
+  if (inFlightPrefetches.has(key)) {
+    return inFlightPrefetches.get(key)!;
+  }
+
+  // 3. Initiate background fetch
+  const fetchPromise = (async () => {
+    try {
+      const res = await fetch(`/api/plans?countryCode=${encodeURIComponent(key)}&_t=${Date.now()}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.plans) && data.plans.length > 0) {
+        const isTargetNotVe = key !== 'VE';
+        const validPlans = isTargetNotVe
+          ? data.plans.filter((p: EsimPlan) => p.countryCode !== 'VE' && p.country !== 'Venezuela')
+          : data.plans;
+
+        if (validPlans.length > 0) {
+          setCachedPlansForCountry(key, validPlans);
+          return validPlans;
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      inFlightPrefetches.delete(key);
+    }
+  })();
+
+  inFlightPrefetches.set(key, fetchPromise);
+  return fetchPromise;
+}
+
+/**
+ * Prefetches plans for a list of initial/popular destinations smoothly in the background
+ */
+export function prefetchInitialDestinations(countryCodes: string[]): void {
+  if (!Array.isArray(countryCodes) || countryCodes.length === 0) return;
+
+  const runQueue = () => {
+    const queue = countryCodes.slice(0, 8); // Top 8 visible destinations
+    let delay = 0;
+    for (const code of queue) {
+      setTimeout(() => {
+        prefetchPlansForCountry(code);
+      }, delay);
+      delay += 250; // Stagger by 250ms so network stays buttery smooth
+    }
+  };
+
+  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    (window as any).requestIdleCallback(runQueue, { timeout: 2500 });
+  } else {
+    setTimeout(runQueue, 1000);
+  }
+}
+
+/**
  * Clear all catalog cache (e.g. after admin sync or manual refresh)
  */
 export function clearCatalogCache(): void {

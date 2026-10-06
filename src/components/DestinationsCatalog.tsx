@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   Search, 
   Globe, 
@@ -37,6 +37,8 @@ import {
   isDestinationsCacheFresh,
   getCachedPlansForCountry,
   setCachedPlansForCountry,
+  prefetchPlansForCountry,
+  prefetchInitialDestinations,
 } from '../utils/catalogCache';
 
 // Search aliases: dialing prefixes (e.g. "57", "+57" -> CO) and famous cities (e.g. "quito" -> EC, "cancun" -> MX)
@@ -188,6 +190,40 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
     setActiveDestination(dest);
   };
 
+  // Hover & Touch Predictive Prefetcher (Mouse hover & mobile finger touch)
+  const hoverPrefetchTimeoutRef = useRef<Record<string, any>>({});
+
+  const handleDestinationHoverStart = useCallback((dest: Destination) => {
+    if (!dest || !dest.code) return;
+    const code = dest.code;
+    
+    // Clear any pending cancellation
+    if (hoverPrefetchTimeoutRef.current[code]) {
+      clearTimeout(hoverPrefetchTimeoutRef.current[code]);
+    }
+
+    // 45ms intentional hover debounce to avoid flurries during fast cursor swiping
+    hoverPrefetchTimeoutRef.current[code] = setTimeout(() => {
+      prefetchPlansForCountry(code);
+      delete hoverPrefetchTimeoutRef.current[code];
+    }, 45);
+  }, []);
+
+  const handleDestinationHoverEnd = useCallback((dest: Destination) => {
+    if (!dest || !dest.code) return;
+    const code = dest.code;
+    if (hoverPrefetchTimeoutRef.current[code]) {
+      clearTimeout(hoverPrefetchTimeoutRef.current[code]);
+      delete hoverPrefetchTimeoutRef.current[code];
+    }
+  }, []);
+
+  const handleDestinationTouchStart = useCallback((dest: Destination) => {
+    if (!dest || !dest.code) return;
+    // On mobile touch, trigger immediately on touchstart so network request is in-flight before touchend/click
+    prefetchPlansForCountry(dest.code);
+  }, []);
+
   // Broadcast search state for Navbar and FAB to collapse on mobile
   useEffect(() => {
     window.dispatchEvent(
@@ -266,6 +302,18 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, selectedRegion, sortBy, itemsPerPage]);
+
+  const handleRegionHover = useCallback((region: string) => {
+    let destsToPrefetch: Destination[] = [];
+    if (region === 'popular') {
+      destsToPrefetch = destinations.filter(d => d.popular).slice(0, 4);
+    } else if (region !== 'all') {
+      destsToPrefetch = destinations.filter(d => d.region === region).slice(0, 4);
+    }
+    if (destsToPrefetch.length > 0) {
+      prefetchInitialDestinations(destsToPrefetch.map(d => d.code));
+    }
+  }, [destinations]);
 
   // Fetch all destinations from MongoDB Atlas (with Stale-While-Revalidate caching)
   useEffect(() => {
@@ -380,6 +428,14 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
       window.removeEventListener('app:database-switched', handleReloadCatalog);
     };
   }, []);
+
+  // Idle prefetch for the top popular destinations on initial load
+  useEffect(() => {
+    if (destinations && destinations.length > 0) {
+      const topCodes = destinations.slice(0, 6).map(d => d.code);
+      prefetchInitialDestinations(topCodes);
+    }
+  }, [destinations]);
 
   // Fetch plans when opening a destination modal (with instant per-country cache)
   useEffect(() => {
@@ -619,6 +675,14 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
     const startIndex = (currentPage - 1) * itemsPerPage;
     return sortedAndFilteredDestinations.slice(startIndex, startIndex + itemsPerPage);
   }, [sortedAndFilteredDestinations, currentPage, itemsPerPage, isAllShown]);
+
+  // Idle prefetch for the first visible destinations on screen (top 4 cards)
+  useEffect(() => {
+    if (paginatedDestinations && paginatedDestinations.length > 0) {
+      const visibleCodes = paginatedDestinations.slice(0, 4).map(d => d.code);
+      prefetchInitialDestinations(visibleCodes);
+    }
+  }, [paginatedDestinations]);
 
   // Filter plans inside active destination modal
   const filteredModalPlans = useMemo(() => {
@@ -925,6 +989,8 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
           </button>
           <button
             onClick={() => handleSelectRegion('popular')}
+            onMouseEnter={() => handleRegionHover('popular')}
+            onTouchStart={() => handleRegionHover('popular')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center gap-1.5 ${
               selectedRegion === 'popular'
                 ? 'bg-slate-900 dark:bg-emerald-600 text-white shadow-xs'
@@ -936,6 +1002,8 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
           </button>
           <button
             onClick={() => handleSelectRegion('europe')}
+            onMouseEnter={() => handleRegionHover('europe')}
+            onTouchStart={() => handleRegionHover('europe')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
               selectedRegion === 'europe'
                 ? 'bg-slate-900 dark:bg-emerald-600 text-white shadow-xs'
@@ -946,6 +1014,8 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
           </button>
           <button
             onClick={() => handleSelectRegion('asia')}
+            onMouseEnter={() => handleRegionHover('asia')}
+            onTouchStart={() => handleRegionHover('asia')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
               selectedRegion === 'asia'
                 ? 'bg-slate-900 dark:bg-emerald-600 text-white shadow-xs'
@@ -956,6 +1026,8 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
           </button>
           <button
             onClick={() => handleSelectRegion('americas')}
+            onMouseEnter={() => handleRegionHover('americas')}
+            onTouchStart={() => handleRegionHover('americas')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
               selectedRegion === 'americas'
                 ? 'bg-slate-900 dark:bg-emerald-600 text-white shadow-xs'
@@ -1041,6 +1113,9 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
             <div
               key={dest.id}
               onClick={() => handleSelectDestination(dest)}
+              onMouseEnter={() => handleDestinationHoverStart(dest)}
+              onMouseLeave={() => handleDestinationHoverEnd(dest)}
+              onTouchStart={() => handleDestinationTouchStart(dest)}
               className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-xl p-4 shadow-2xs hover:shadow-sm transition-all cursor-pointer group flex flex-col justify-between"
             >
               <div>
@@ -1114,6 +1189,9 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
             <div
               key={dest.id}
               onClick={() => handleSelectDestination(dest)}
+              onMouseEnter={() => handleDestinationHoverStart(dest)}
+              onMouseLeave={() => handleDestinationHoverEnd(dest)}
+              onTouchStart={() => handleDestinationTouchStart(dest)}
               className="p-3.5 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
             >
               <div className="flex items-center gap-3 min-w-0">
