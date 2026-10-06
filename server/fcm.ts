@@ -184,18 +184,6 @@ export async function sendPushNotification(params: SendPushParams): Promise<Send
           defaultVibrateTimings: true,
         },
       },
-      apns: {
-        headers: {
-          'apns-priority': '10',
-        },
-        payload: {
-          aps: {
-            sound: 'default',
-            badge: 1,
-            contentAvailable: true,
-          },
-        },
-      },
     };
 
     const messaging = getMessaging(app);
