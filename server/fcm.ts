@@ -125,6 +125,25 @@ export async function sendPushNotification(params: SendPushParams): Promise<Send
     return { success: false, error: 'FCM Token inválido o vacío' };
   }
 
+  // Handle simulated / mock tokens gracefully during development/testing
+  const cleanToken = token.trim();
+  if (
+    cleanToken.startsWith('fcm_test_') ||
+    cleanToken.startsWith('dev_mobile_') ||
+    cleanToken.startsWith('simulated_') ||
+    cleanToken.startsWith('test_') ||
+    cleanToken.startsWith('web_')
+  ) {
+    console.log(`📱 [FCM Simulado] Entrega de prueba para token "${cleanToken.substring(0, 20)}...":`);
+    console.log(`   Título: ${title}`);
+    console.log(`   Cuerpo: ${body}`);
+    return {
+      success: true,
+      messageId: `projects/wappa-esim/messages/simulated_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      simulated: true,
+    };
+  }
+
   const app = getFirebaseAdminApp();
 
   // If Firebase Admin credentials are not provided yet, provide clear simulation for development/testing
@@ -155,13 +174,20 @@ export async function sendPushNotification(params: SendPushParams): Promise<Send
       },
       android: {
         priority: 'high',
+        ttl: 0,
         notification: {
+          channelId: 'esim_alerts',
           sound: 'default',
           priority: 'max',
           visibility: 'public',
+          defaultSound: true,
+          defaultVibrateTimings: true,
         },
       },
       apns: {
+        headers: {
+          'apns-priority': '10',
+        },
         payload: {
           aps: {
             sound: 'default',

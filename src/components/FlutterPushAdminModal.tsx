@@ -16,6 +16,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { User, UserEsim } from '../types';
+import { requestWebPushPermission } from '../utils/webPushManager';
 
 interface FlutterPushAdminModalProps {
   isOpen: boolean;
@@ -59,6 +60,77 @@ export const FlutterPushAdminModal: React.FC<FlutterPushAdminModalProps> = ({
       console.warn('Error al cargar dispositivos:', e);
     } finally {
       setIsLoadingDevices(false);
+    }
+  };
+
+  const handleClearOldDevices = async () => {
+    if (!window.confirm('¿Deseas limpiar todos los dispositivos antiguos para dejar la cuenta limpia y registrar tu teléfono desde cero?')) return;
+    setIsLoadingDevices(true);
+    try {
+      await fetch('/api/user/clear-fcm-tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email || 'mgbravomalo@gmail.com' }),
+      });
+      setDevicesList([]);
+      setResultData({
+        success: true,
+        title: '🧹 Dispositivos antiguos eliminados',
+        body: 'Lista limpiada correctamente. Ahora abre la app de Flutter en tu teléfono e inicia sesión para registrar tu nuevo token limpio.',
+      });
+    } catch (e: any) {
+      alert('Error limpiando dispositivos: ' + e.message);
+    } finally {
+      setIsLoadingDevices(false);
+    }
+  };
+
+  const handleTestBrowserPush = async () => {
+    setIsLoading(true);
+    setResultData(null);
+    try {
+      if ('Notification' in window) {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          const testTitle = selectedPreset === '80_percent' 
+            ? `🔔 Alerta Wappa: 80% consumido en ${selectedCountry}`
+            : selectedPreset === '90_percent'
+            ? `⚠️ ¡Cuidado! 90% consumido en ${selectedCountry}`
+            : selectedPreset === '24_hours'
+            ? `⏳ Tu eSIM en ${selectedCountry} vence en 24 horas`
+            : (customTitle || '🧪 Notificación de Prueba');
+          const testBody = selectedPreset === '80_percent'
+            ? `Has consumido el 80% de tus datos en ${selectedCountry}. Toca para recargar.`
+            : (customBody || 'Notificación activa en este navegador.');
+          
+          new Notification(testTitle, {
+            body: testBody,
+            icon: '/favicon.png',
+          });
+
+          setResultData({
+            success: true,
+            title: testTitle,
+            body: testBody,
+            route: `/my-esims?iccid=${selectedIccid}`,
+            results: [{ tokenPreview: 'Navegador Web Local', success: true }],
+          });
+        } else {
+          setResultData({
+            success: false,
+            error: 'Permiso de notificaciones rechazado en tu navegador. Por favor permite las notificaciones en el icono de candado de la barra de direcciones.',
+          });
+        }
+      } else {
+        setResultData({
+          success: false,
+          error: 'Este navegador no soporta notificaciones de escritorio.',
+        });
+      }
+    } catch (err: any) {
+      setResultData({ success: false, error: err.message });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -162,14 +234,26 @@ export const FlutterPushAdminModal: React.FC<FlutterPushAdminModalProps> = ({
                   Dispositivos Móviles Registrados ({devicesList.length})
                 </h4>
               </div>
-              <button
-                onClick={fetchDevices}
-                disabled={isLoadingDevices}
-                className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3 h-3 ${isLoadingDevices ? 'animate-spin' : ''}`} />
-                <span>Actualizar</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchDevices}
+                  disabled={isLoadingDevices}
+                  className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isLoadingDevices ? 'animate-spin' : ''}`} />
+                  <span>Actualizar</span>
+                </button>
+                {devicesList.length > 0 && (
+                  <button
+                    onClick={handleClearOldDevices}
+                    disabled={isLoadingDevices}
+                    className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1 disabled:opacity-50 ml-2"
+                    title="Elimina los dispositivos antiguos caducados para dejar la cuenta limpia"
+                  >
+                    <span>🗑️ Limpiar caducados</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {devicesList.length > 0 ? (
@@ -195,9 +279,56 @@ export const FlutterPushAdminModal: React.FC<FlutterPushAdminModalProps> = ({
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Abre la aplicación Flutter en tu teléfono e inicia sesión para registrar automáticamente tu token FCM.
-              </p>
+              <div className="p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/60 space-y-2.5">
+                <p className="text-xs text-purple-900 dark:text-purple-200 leading-relaxed">
+                  No hay dispositivos registrados en este momento. Abre la app de Flutter en tu teléfono e inicia sesión, o registra este navegador ahora mismo para hacer pruebas:
+                </p>
+                <div className="flex flex-wrap gap-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsLoadingDevices(true);
+                      try {
+                        const res = await requestWebPushPermission(user.email || 'mgbravomalo@gmail.com');
+                        await fetchDevices();
+                        if (res.success) {
+                          alert('¡Dispositivo registrado correctamente! Ya puedes enviar la alerta.');
+                        }
+                      } finally {
+                        setIsLoadingDevices(false);
+                      }
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md shadow-purple-600/20 flex items-center gap-1.5 transition-all active:scale-95"
+                  >
+                    <span>📲 Registrar este Navegador como Dispositivo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsLoadingDevices(true);
+                      try {
+                        const dummyToken = 'dev_mobile_simulated_' + Math.random().toString(36).substring(2, 12);
+                        await fetch('/api/user/device-token', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            email: user.email || 'mgbravomalo@gmail.com',
+                            fcmToken: dummyToken,
+                            deviceName: 'Android Xiaomi (Simulado)',
+                            platform: 'android',
+                          }),
+                        });
+                        await fetchDevices();
+                      } finally {
+                        setIsLoadingDevices(false);
+                      }
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-all active:scale-95"
+                  >
+                    <span>🤖 Simular Dispositivo Android</span>
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 
@@ -388,6 +519,17 @@ export const FlutterPushAdminModal: React.FC<FlutterPushAdminModalProps> = ({
 
             <button
               type="button"
+              onClick={handleTestBrowserPush}
+              disabled={isLoading}
+              className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5"
+              title="Muestra la notificación inmediatamente en la pantalla de este navegador para verificar el mensaje"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>Probar en este Navegador</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleRunFullCycle}
               disabled={isLoading}
               className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors disabled:opacity-50"
@@ -436,6 +578,41 @@ export const FlutterPushAdminModal: React.FC<FlutterPushAdminModalProps> = ({
                 <p className="text-rose-700 dark:text-rose-300 font-medium">
                   {resultData.error}
                 </p>
+              )}
+
+              {resultData.results && resultData.results.length > 0 && (
+                <div className="space-y-1.5 pt-1.5">
+                  <p className="font-semibold text-[11px] text-slate-700 dark:text-slate-300">
+                    Resultado por dispositivo ({resultData.deliveredCount || 0} entregados de {resultData.results.length}):
+                  </p>
+                  <div className="space-y-1">
+                    {resultData.results.map((r: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between text-[11px] px-2.5 py-1.5 rounded-lg bg-black/5 dark:bg-white/5 font-mono">
+                        <span className="truncate max-w-[200px]">{r.tokenPreview}</span>
+                        {r.success ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Entregado
+                          </span>
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-400 font-bold">
+                            {r.error === 'NotRegistered' ? 'Expirado (App cerrada/reinstalada)' : (r.error || 'Error')}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {!resultData.success && (
+                    <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+                      <p className="font-bold">📱 ¿Por qué no llegó la notificación?</p>
+                      <p>
+                        Los tokens registrados previamente en tu cuenta han caducado porque la app de Flutter se reinstaló o cerró su sesión.
+                      </p>
+                      <p>
+                        👉 <strong>Para solucionarlo:</strong> Abre la app de Flutter en tu teléfono e inicia sesión con <strong>{user.email || 'tu correo'}</strong> para que registre tu token nuevo al instante.
+                      </p>
+                    </div>
+                  )}
+                </div>
               )}
 
               {resultData.emailResult && resultData.emailResult.success && (

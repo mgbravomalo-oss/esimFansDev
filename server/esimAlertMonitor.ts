@@ -11,7 +11,8 @@
  */
 
 import cron from 'node-cron';
-import { UserEsimModel, AtlasCustomerModel, connectToDatabase } from './db.js';
+import { UserEsimModel, AtlasCustomerModel, connectToDatabase, isDatabaseConnected, isD1Configured } from './db.js';
+import { d1Client } from './d1Client.js';
 import { queryEsimUsage, isEsimAccessConfigured } from './esimAccess.js';
 import { sendPushNotification, buildEsimAlertMessage } from './fcm.js';
 import { sendEsimAlertEmail } from './mailer.js';
@@ -156,16 +157,29 @@ export async function runEsimConsumptionAlertCheck(): Promise<AlertCheckSummary>
         let userFcmToken: string | null = esim.fcmToken || null;
 
         if (!userFcmToken && esim.userEmail) {
-          const customer = await AtlasCustomerModel.findOne({
-            email: esim.userEmail.toLowerCase().trim(),
-          }).exec();
-
-          if (customer) {
-            if (customer.fcmTokens && customer.fcmTokens.length > 0) {
-              userFcmToken = customer.fcmTokens[customer.fcmTokens.length - 1];
-            } else if (customer.fcmDevices && customer.fcmDevices.length > 0) {
-              userFcmToken = customer.fcmDevices[customer.fcmDevices.length - 1].token;
-            }
+          const emailLower = esim.userEmail.toLowerCase().trim();
+          if (isDatabaseConnected()) {
+            try {
+              const customer = await AtlasCustomerModel.findOne({ email: emailLower }).exec();
+              if (customer) {
+                if (customer.fcmTokens && customer.fcmTokens.length > 0) {
+                  userFcmToken = customer.fcmTokens[customer.fcmTokens.length - 1];
+                } else if (customer.fcmDevices && customer.fcmDevices.length > 0) {
+                  userFcmToken = customer.fcmDevices[customer.fcmDevices.length - 1].token;
+                }
+              }
+            } catch {}
+          }
+          if (!userFcmToken && isD1Configured()) {
+            try {
+              const rows = await d1Client.query('SELECT * FROM customers WHERE LOWER(email) = LOWER(?) LIMIT 1', [emailLower]);
+              if (rows && rows.length > 0 && rows[0].fcm_tokens_json) {
+                const tokens = JSON.parse(rows[0].fcm_tokens_json);
+                if (Array.isArray(tokens) && tokens.length > 0) {
+                  userFcmToken = tokens[tokens.length - 1];
+                }
+              }
+            } catch {}
           }
         }
 

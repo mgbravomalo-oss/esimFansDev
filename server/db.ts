@@ -6,7 +6,7 @@ import { d1Client } from './d1Client.js';
 import { DESTINATIONS as FALLBACK_DESTINATIONS, ESIM_PLANS as FALLBACK_PLANS, DEMO_USERS as FALLBACK_USERS, DEMO_USER_ESIMS as FALLBACK_USER_ESIMS, COMPATIBLE_DEVICES as FALLBACK_COMPATIBLE_DEVICES } from '../src/data/esimData.js';
 import { Destination, EsimPlan, User, UserEsim, CompatibleDevice } from '../src/types';
 
-mongoose.set('bufferCommands', true);
+mongoose.set('bufferCommands', false);
 
 export const SPANISH_COUNTRY_NAMES: Record<string, string> = {
   US: 'Estados Unidos', JP: 'Japón', ES: 'España', FR: 'Francia', IT: 'Italia',

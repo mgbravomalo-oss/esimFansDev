@@ -80,7 +80,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [googleAuthError, setGoogleAuthError] = useState<string | null>(null);
   const { isDark } = useTheme();
 
-  const googleClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
+  const googleClientId = (
+    import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+    '1075329650305-v9qrqth5j65cahp60o91r0hgnjmirk48.apps.googleusercontent.com'
+  ).trim();
 
   // Inicializar Google Identity Services cuando el modal se abre
   useEffect(() => {

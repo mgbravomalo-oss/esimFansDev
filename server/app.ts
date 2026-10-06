@@ -11,6 +11,7 @@ import {
   connectToDatabase,
   getDatabaseStatus,
   isDatabaseConnected,
+  isD1Configured,
   getActiveDatabaseProvider,
   setActiveDatabaseProvider,
   isDualWriteEnabled,
@@ -60,6 +61,7 @@ import {
 import { sendPushNotification, getFcmConfigStatus, isFcmConfigured, buildEsimAlertMessage } from './fcm.js';
 import { runEsimConsumptionAlertCheck } from './esimAlertMonitor.js';
 import QRCode from 'qrcode';
+import { d1Client } from './d1Client.js';
 
 export const app = express();
 
@@ -4787,62 +4789,91 @@ app.post('/api/user/device-token', async (req: Request, res: Response) => {
 
     await connectToDatabase();
 
-    let updatedCustomer = null;
+    let updatedCustomer: any = null;
 
     if (cleanEmail) {
-      // 1. Find or create customer record in MongoDB Atlas
-      let customer = await AtlasCustomerModel.findOne({ email: cleanEmail }).exec();
-
-      if (!customer) {
-        customer = new AtlasCustomerModel({
-          id: userId || `cust_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          name: email.split('@')[0] || 'Usuario App Móvil',
-          email: cleanEmail,
-          fcmTokens: [cleanToken],
-          fcmDevices: [
-            {
-              token: cleanToken,
-              deviceName: deviceName || 'Dispositivo Móvil',
-              platform: platform || 'android',
-              lastSeen: new Date(),
-            },
-          ],
-          pushNotificationsEnabled: true,
-        });
-        await customer.save();
-      } else {
-        if (!customer.fcmTokens) customer.fcmTokens = [];
-        if (!customer.fcmTokens.includes(cleanToken)) {
-          customer.fcmTokens.push(cleanToken);
-        }
-
-        if (!customer.fcmDevices) customer.fcmDevices = [];
-        const existingDevIndex = customer.fcmDevices.findIndex(d => d.token === cleanToken);
-        if (existingDevIndex >= 0) {
-          customer.fcmDevices[existingDevIndex].lastSeen = new Date();
-          if (deviceName) customer.fcmDevices[existingDevIndex].deviceName = deviceName;
-          if (platform) customer.fcmDevices[existingDevIndex].platform = platform;
-        } else {
-          customer.fcmDevices.push({
+      // 1. Find or create customer record in MongoDB Atlas if connected
+      if (isDatabaseConnected()) {
+        try {
+          const deviceObj = {
             token: cleanToken,
             deviceName: deviceName || 'Dispositivo Móvil',
             platform: platform || 'android',
             lastSeen: new Date(),
-          });
-        }
-        await customer.save();
-      }
-      updatedCustomer = customer;
+          };
 
-      // 2. Also propagate token to any active eSIMs belonging to this user
-      await UserEsimModel.updateMany(
-        {
-          userEmail: cleanEmail,
-          status: { $in: ['active', 'ready_to_install'] },
-          $or: [{ fcmToken: { $exists: false } }, { fcmToken: '' }, { fcmToken: null }],
-        },
-        { $set: { fcmToken: cleanToken } }
-      ).exec();
+          // Remove any duplicate token entry first, then push fresh device object directly
+          await AtlasCustomerModel.collection.updateOne(
+            { email: cleanEmail },
+            { 
+              $pull: { fcmDevices: { token: cleanToken }, fcmTokens: cleanToken } as any
+            }
+          );
+
+          await AtlasCustomerModel.collection.updateOne(
+            { email: cleanEmail },
+            {
+              $push: { fcmTokens: cleanToken, fcmDevices: deviceObj } as any,
+              $setOnInsert: {
+                id: userId || `cust_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                name: email.split('@')[0] || 'Usuario App Móvil',
+                email: cleanEmail,
+                pushNotificationsEnabled: true,
+                createdAt: new Date(),
+              },
+              $set: { updatedAt: new Date() }
+            },
+            { upsert: true }
+          );
+
+          // Also propagate token to any active eSIMs belonging to this user in MongoDB
+          await UserEsimModel.updateMany(
+            {
+              userEmail: cleanEmail,
+              status: { $in: ['active', 'ready_to_install'] },
+              $or: [{ fcmToken: { $exists: false } }, { fcmToken: '' }, { fcmToken: null }],
+            },
+            { $set: { fcmToken: cleanToken } }
+          ).exec();
+        } catch (mongoErr: any) {
+          console.warn('⚠️ [MongoDB Atlas] Error actualizando device-token:', mongoErr.message);
+        }
+      }
+
+      // 2. Also save to Cloudflare D1 if configured
+      if (isD1Configured()) {
+        try {
+          const rows = await d1Client.query('SELECT * FROM customers WHERE LOWER(email) = LOWER(?) LIMIT 1', [cleanEmail]);
+          let existingTokens: string[] = [];
+          if (rows && rows.length > 0) {
+            try {
+              if (rows[0].fcm_tokens_json) existingTokens = JSON.parse(rows[0].fcm_tokens_json);
+            } catch {}
+            if (!existingTokens.includes(cleanToken)) existingTokens.push(cleanToken);
+            await d1Client.query(
+              'UPDATE customers SET fcm_tokens_json = ?, updated_at = datetime("now") WHERE LOWER(email) = LOWER(?)',
+              [JSON.stringify(existingTokens), cleanEmail]
+            );
+          } else {
+            existingTokens = [cleanToken];
+            const newId = userId || `cust_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+            const name = email.split('@')[0] || 'Usuario';
+            await d1Client.query(
+              'INSERT INTO customers (id, name, email, fcm_tokens_json, push_notifications_enabled) VALUES (?, ?, ?, ?, 1)',
+              [newId, name, cleanEmail, JSON.stringify(existingTokens)]
+            );
+          }
+          if (!updatedCustomer) {
+            updatedCustomer = { email: cleanEmail, fcmTokens: existingTokens };
+          }
+          await d1Client.query(
+            'UPDATE user_esims SET fcm_token = ? WHERE LOWER(user_email) = LOWER(?) AND (fcm_token IS NULL OR fcm_token = "")',
+            [cleanToken, cleanEmail]
+          );
+        } catch (d1Err: any) {
+          console.warn('⚠️ [Cloudflare D1] Error actualizando device-token en D1:', d1Err.message);
+        }
+      }
     }
 
     console.log(`📱 [FCM Token Registrado] Email: "${cleanEmail || 'Anónimo'}", Token: "${cleanToken.substring(0, 15)}..."`);
@@ -4861,6 +4892,32 @@ app.post('/api/user/device-token', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/user/clear-fcm-tokens - Prune obsolete or expired tokens for user
+ */
+app.post('/api/user/clear-fcm-tokens', async (req: Request, res: Response) => {
+  try {
+    const email = (req.body.email || req.query.email || 'mgbravomalo@gmail.com').toLowerCase().trim();
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email requerido' });
+    }
+    if (isDatabaseConnected()) {
+      try {
+        await AtlasCustomerModel.updateOne({ email }, { $set: { fcmTokens: [], fcmDevices: [] } }).exec();
+      } catch {}
+    }
+    if (isD1Configured()) {
+      try {
+        await d1Client.query('UPDATE customers SET fcm_tokens_json = "[]" WHERE LOWER(email) = LOWER(?)', [email]);
+      } catch {}
+    }
+    console.log(`🧹 [FCM Tokens Pruned] Todos los tokens antiguos fueron eliminados para: ${email}`);
+    res.json({ success: true, message: 'Tokens antiguos eliminados correctamente' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/user/profile - Get user profile and registered FCM devices
  */
 app.get('/api/user/profile', async (req: Request, res: Response) => {
@@ -4869,8 +4926,38 @@ app.get('/api/user/profile', async (req: Request, res: Response) => {
     if (!email) {
       return res.status(400).json({ success: false, error: 'Se requiere el parámetro email' });
     }
-    await connectToDatabase();
-    const customer = await AtlasCustomerModel.findOne({ email }).lean();
+    
+    let customer: any = null;
+
+    if (isDatabaseConnected()) {
+      try {
+        customer = await AtlasCustomerModel.collection.findOne({ email });
+      } catch {}
+    }
+
+    if (!customer && isD1Configured()) {
+      try {
+        const rows = await d1Client.query('SELECT * FROM customers WHERE LOWER(email) = LOWER(?) LIMIT 1', [email]);
+        if (rows && rows.length > 0) {
+          const row = rows[0];
+          let fcmTokens: string[] = [];
+          if (row.fcm_tokens_json) {
+            try { fcmTokens = JSON.parse(row.fcm_tokens_json); } catch {}
+          }
+          customer = {
+            id: row.id,
+            email: row.email,
+            name: row.name,
+            role: row.role || 'user',
+            fcmTokens,
+            fcmDevices: fcmTokens.map((t: string) => ({ token: t, deviceName: 'Dispositivo Registrado', platform: 'android', lastSeen: row.updated_at })),
+          };
+        }
+      } catch (err: any) {
+        console.warn('Error en D1 al obtener perfil de usuario:', err.message);
+      }
+    }
+
     if (!customer) {
       return res.json({ success: true, customer: null, message: 'Customer not found' });
     }
@@ -4963,7 +5050,35 @@ app.post('/api/notifications/flutter-test', async (req: Request, res: Response) 
     await connectToDatabase();
 
     const cleanEmail = (email || 'mgbravomalo@gmail.com').toLowerCase().trim();
-    const customer = await AtlasCustomerModel.findOne({ email: cleanEmail }).exec();
+    let customer: any = null;
+
+    if (isDatabaseConnected()) {
+      try {
+        customer = await AtlasCustomerModel.findOne({ email: cleanEmail }).exec();
+      } catch {}
+    }
+
+    if (!customer && isD1Configured()) {
+      try {
+        const rows = await d1Client.query('SELECT * FROM customers WHERE LOWER(email) = LOWER(?) LIMIT 1', [cleanEmail]);
+        if (rows && rows.length > 0) {
+          const row = rows[0];
+          let fcmTokens: string[] = [];
+          if (row.fcm_tokens_json) {
+            try { fcmTokens = JSON.parse(row.fcm_tokens_json); } catch {}
+          }
+          customer = {
+            id: row.id,
+            email: row.email,
+            name: row.name,
+            fcmTokens,
+            fcmDevices: fcmTokens.map((t: string) => ({ token: t, deviceName: 'Dispositivo Móvil', platform: 'android' })),
+          };
+        }
+      } catch (err: any) {
+        console.warn('Error en D1 al buscar cliente para push test:', err.message);
+      }
+    }
 
     const registeredDevices = customer?.fcmDevices || [];
     let targetTokens: string[] = [];
@@ -4972,8 +5087,16 @@ app.post('/api/notifications/flutter-test', async (req: Request, res: Response) 
       targetTokens = [token.trim()];
     } else if (customer && customer.fcmTokens && customer.fcmTokens.length > 0) {
       // Prioritize Flutter native device tokens (e.g. Android/iOS tokens from FCM)
-      const nativeTokens = customer.fcmTokens.filter(t => !t.startsWith('web_') && !t.startsWith('test_') && t.length > 25);
-      targetTokens = nativeTokens.length > 0 ? nativeTokens : customer.fcmTokens;
+      const nativeTokens = customer.fcmTokens.filter(t => 
+        !t.startsWith('web_') && 
+        !t.startsWith('test_') && 
+        !t.startsWith('fcm_test_') && 
+        !t.startsWith('dev_mobile_') && 
+        t.length > 50
+      );
+      const activeCandidates = nativeTokens.length > 0 ? nativeTokens : customer.fcmTokens;
+      // Send to the active device token directly
+      targetTokens = activeCandidates.slice(-1);
     }
 
     if (targetTokens.length === 0) {
@@ -5034,6 +5157,26 @@ app.post('/api/notifications/flutter-test', async (req: Request, res: Response) 
 
       if (pushRes.success) {
         deliveredCount++;
+      } else if (pushRes.error?.includes('NotRegistered') && cleanEmail) {
+        // Automatically prune dead tokens so user records stay healthy
+        if (isDatabaseConnected()) {
+          try {
+            await AtlasCustomerModel.updateOne(
+              { email: cleanEmail },
+              { $pull: { fcmTokens: t, fcmDevices: { token: t } } }
+            ).exec();
+          } catch {}
+        }
+        if (isD1Configured()) {
+          try {
+            const rows = await d1Client.query('SELECT fcm_tokens_json FROM customers WHERE LOWER(email) = LOWER(?) LIMIT 1', [cleanEmail]);
+            if (rows && rows.length > 0 && rows[0].fcm_tokens_json) {
+              const currentTokens: string[] = JSON.parse(rows[0].fcm_tokens_json);
+              const remaining = currentTokens.filter(x => x !== t);
+              await d1Client.query('UPDATE customers SET fcm_tokens_json = ? WHERE LOWER(email) = LOWER(?)', [JSON.stringify(remaining), cleanEmail]);
+            }
+          } catch {}
+        }
       }
 
       results.push({
@@ -5098,7 +5241,23 @@ app.post('/api/notifications/test-push', async (req: Request, res: Response) => 
     await connectToDatabase();
 
     if (!targetToken && email) {
-      const customer = await AtlasCustomerModel.findOne({ email: email.toLowerCase().trim() }).exec();
+      let customer: any = null;
+      if (isDatabaseConnected()) {
+        try {
+          customer = await AtlasCustomerModel.findOne({ email: email.toLowerCase().trim() }).exec();
+        } catch {}
+      }
+      if (!customer && isD1Configured()) {
+        try {
+          const rows = await d1Client.query('SELECT * FROM customers WHERE LOWER(email) = LOWER(?) LIMIT 1', [email.toLowerCase().trim()]);
+          if (rows && rows.length > 0 && rows[0].fcm_tokens_json) {
+            const fcmTokens = JSON.parse(rows[0].fcm_tokens_json);
+            if (Array.isArray(fcmTokens) && fcmTokens.length > 0) {
+              targetToken = fcmTokens[fcmTokens.length - 1];
+            }
+          }
+        } catch {}
+      }
       if (customer && customer.fcmTokens && customer.fcmTokens.length > 0) {
         targetToken = customer.fcmTokens[customer.fcmTokens.length - 1];
       }

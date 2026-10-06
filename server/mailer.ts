@@ -515,7 +515,7 @@ export async function sendEsimAlertEmail(payload: EsimAlertEmailPayload): Promis
     alertDescription = `La vigencia de tu plan de datos en <strong>${country}</strong> finalizará en 24 horas.`;
   }
 
-  const appUrl = (process.env.APP_URL || 'https://mariodev.ai.studio').replace(/\/$/, '');
+  const appUrl = (process.env.APP_URL || 'https://esimfans.run.app').replace(/\/$/, '');
   const reloadUrl = `${appUrl}?tab=myesims&iccid=${encodeURIComponent(iccid)}`;
   const displayName = userName ? userName.split(' ')[0] : 'Viajero';
 
