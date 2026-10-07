@@ -94,6 +94,8 @@ export default defineConfig(() => {
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: false,
       watch: null,
+      host: true,
+      allowedHosts: ['all'],
     },
   };
 });
