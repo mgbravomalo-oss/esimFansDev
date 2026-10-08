@@ -17,6 +17,9 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   const [dismissed, setDismissed] = useState(false);
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
 
+  // Check for Flutter WebView (often indicated by 'Flutter' in User Agent)
+  const isInFlutterWebView = typeof navigator !== 'undefined' && navigator.userAgent.includes('Flutter');
+
   React.useEffect(() => {
     const handleSearchState = (e: any) => {
       setIsMobileSearchActive(Boolean(e.detail?.active));
@@ -25,8 +28,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     return () => window.removeEventListener('app:mobile-search-state', handleSearchState);
   }, []);
 
-  // If already running in standalone mode (already installed), or during mobile focused search, hide completely
-  if (isInstalled || dismissed || (isMobileSearchActive && (variant === 'floating' || variant === 'banner'))) {
+  // If already running in standalone mode (already installed), or during mobile focused search, or in Flutter WebView, hide completely
+  if (isInstalled || dismissed || isInFlutterWebView || (isMobileSearchActive && (variant === 'floating' || variant === 'banner'))) {
     return null;
   }
 
@@ -142,27 +145,40 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             </div>
 
             <div className="space-y-3 pt-2">
-              <div className="flex items-start gap-3 bg-slate-50 dark:bg-slate-850 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-                <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                  1
-                </div>
-                <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Toca el botón <strong className="text-slate-900 dark:text-white inline-flex items-center gap-1">Compartir <Share2 className="w-3.5 h-3.5 inline text-sky-500" /></strong> en la barra de tu navegador (Safari o Chrome).
-                </div>
-              </div>
+              {isIOS ? (
+                <>
+                  <div className="flex items-start gap-3 bg-slate-100 dark:bg-slate-800 p-3 rounded-xl border border-slate-300 dark:border-slate-700">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-700 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                      1
+                    </div>
+                    <div className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed">
+                      Toca el botón <strong className="text-black dark:text-white inline-flex items-center gap-1">Compartir <Share2 className="w-3.5 h-3.5 inline text-emerald-700 dark:text-emerald-400" /></strong> en la barra de tu navegador (Safari o Chrome).
+                    </div>
+                  </div>
 
-              <div className="flex items-start gap-3 bg-slate-50 dark:bg-slate-850 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-                <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                  2
+                  <div className="flex items-start gap-3 bg-slate-100 dark:bg-slate-800 p-3 rounded-xl border border-slate-300 dark:border-slate-700">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-700 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                      2
+                    </div>
+                    <div className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed">
+                      Baja y pulsa en <strong className="text-black dark:text-white inline-flex items-center gap-1">Añadir a pantalla de inicio <PlusSquare className="w-3.5 h-3.5 inline text-emerald-700 dark:text-emerald-400" /></strong>.
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-start gap-3 bg-slate-100 dark:bg-slate-800 p-3 rounded-xl border border-slate-300 dark:border-slate-700">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-700 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                    1
+                  </div>
+                  <div className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed">
+                    Haz clic en el <strong className="text-black dark:text-white">menú de tres puntos (⋮)</strong> en la esquina superior derecha de tu navegador y selecciona <strong className="text-black dark:text-white">"Instalar eSIM Global..."</strong> o "Instalar aplicación".
+                  </div>
                 </div>
-                <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Baja y pulsa en <strong className="text-slate-900 dark:text-white inline-flex items-center gap-1">Añadir a pantalla de inicio <PlusSquare className="w-3.5 h-3.5 inline text-emerald-500" /></strong>.
-                </div>
-              </div>
+              )}
 
-              <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 bg-emerald-50/50 dark:bg-emerald-950/20 p-2.5 rounded-lg border border-emerald-200/50 dark:border-emerald-800/40">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>La app se abrirá en pantalla completa y guardará tus eSIMs para verlas sin internet.</span>
+              <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400 bg-emerald-50 dark:bg-emerald-950/20 p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-800/40">
+                <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
+                <span>La app se abrirá en una ventana dedicada para un acceso más rápido.</span>
               </div>
             </div>
 
