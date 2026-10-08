@@ -9,10 +9,6 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    permissions: 
-      contents: read
-      packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,6 +23,19 @@ jobs:
       - name: Build and push container image to registry
         uses: docker/build-push-action@v5
         with:
+          context: .
           push: true
           tags: acresimfans01.azurecr.io/esimfansdev:${{ github.sha }}
           file: ./Dockerfile
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: container-app-1abf
+          resourceGroup: rg-d0f7
+          imageToDeploy: acresimfans01.azurecr.io/esimfansdev:${{ github.sha }}
