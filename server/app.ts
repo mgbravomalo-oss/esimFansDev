@@ -28,6 +28,7 @@ import {
   deleteCompatibleDeviceFromAtlas,
   seedCompatibleDevicesIfEmpty,
   importEsimAccessPackagesToAtlas,
+  invalidateServerCatalogCache,
   UserEsimModel,
   AtlasCustomerModel,
   AtlasOrderModel,
@@ -849,7 +850,7 @@ app.post('/api/compatible-devices/seed', async (req: Request, res: Response) => 
 
 app.get('/api/destinations', async (req: Request, res: Response) => {
   try {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
 
     const region = req.query.region as string;
     const search = (req.query.search as string || '').toLowerCase().trim();
@@ -900,7 +901,7 @@ app.get('/api/destinations', async (req: Request, res: Response) => {
 
 app.get('/api/plans', async (req: Request, res: Response) => {
   try {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
 
     const countryCode = (req.query.countryCode as string || '').toUpperCase().trim();
     const region = req.query.region as string;
@@ -934,6 +935,7 @@ app.post('/api/plans/import-esimaccess', requireAdmin, async (req: Authenticated
     }
 
     const result = await importEsimAccessPackagesToAtlas(rawPackages);
+    invalidateServerCatalogCache();
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -3231,6 +3233,7 @@ app.post('/api/esimaccess/sync-catalog', requireAdmin, async (req: Authenticated
     }
 
     const importResult = await importEsimAccessPackagesToAtlas(pkgRes.packages);
+    invalidateServerCatalogCache();
     res.json({
       success: true,
       provider: 'eSIM Access',
