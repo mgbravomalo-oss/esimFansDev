@@ -610,3 +610,154 @@ export async function sendEsimAlertEmail(payload: EsimAlertEmailPayload): Promis
   }
 }
 
+export interface PlanUnavailableAlertPayload {
+  adminEmail?: string;
+  plan: {
+    id?: string;
+    packageCode?: string;
+    name: string;
+    country: string;
+    countryCode?: string;
+    priceEUR?: number;
+    dataAmountGB?: number;
+    durationDays?: number;
+  };
+  user: {
+    name?: string;
+    email: string;
+  };
+  paymentMethod?: string;
+  reason?: string;
+  attemptedAt?: string;
+}
+
+/**
+ * Envia correo urgente al administrador (mgbravomalo@gmail.com) cuando un cliente intenta
+ * comprar un plan que ya no está disponible en el mayorista eSIMAccess.
+ * El cobro es cancelado preventivamente para evitar devoluciones.
+ */
+export async function sendPlanUnavailableAdminAlertEmail(payload: PlanUnavailableAlertPayload): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const targetAdminEmail = (payload.adminEmail || 'mgbravomalo@gmail.com').trim();
+  const transporter = getTransporter();
+
+  if (!transporter) {
+    console.warn(`⚠️ [Mailer] Transporter no disponible. Alerta para ${targetAdminEmail} no enviada por SMTP.`);
+    return { success: false, error: 'Servicio de correo SMTP no configurado' };
+  }
+
+  const { plan, user, paymentMethod = 'Tarjeta / GPay', reason = 'No disponible en catálogo mayorista', attemptedAt = new Date().toLocaleString('es-ES') } = payload;
+  const packageCode = plan.packageCode || plan.id || 'N/A';
+
+  try {
+    const info = await transporter.sendMail({
+      from: `"Wappa eSIM Alertas" <${normalizeSmtpConfig().user}>`,
+      to: targetAdminEmail,
+      subject: `🚨 [ALERTA ADMINISTRADOR] Plan No Disponible Intentado: ${plan.name} (${plan.country})`,
+      html: `
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; margin: 0; padding: 24px; color: #f8fafc; }
+            .card { max-width: 620px; margin: 0 auto; background: #1e293b; border-radius: 20px; border: 1px solid #334155; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+            .header { background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); padding: 24px; color: #ffffff; text-align: center; }
+            .header h1 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+            .header p { margin: 6px 0 0; font-size: 13px; opacity: 0.95; }
+            .content { padding: 28px 24px; }
+            .pill { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+            .pill-blocked { background: #fee2e2; color: #991b1b; }
+            .alert-box { background: #450a0a; border: 1px solid #991b1b; border-radius: 14px; padding: 16px; margin-bottom: 24px; }
+            .alert-box h3 { margin: 0 0 6px 0; font-size: 14px; color: #fca5a5; }
+            .alert-box p { margin: 0; font-size: 13px; color: #fecaca; line-height: 1.4; }
+            .table-box { background: #0f172a; border-radius: 14px; padding: 16px; border: 1px solid #334155; margin-bottom: 24px; }
+            .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #1e293b; font-size: 13px; }
+            .row:last-child { border-bottom: none; }
+            .label { color: #94a3b8; font-weight: 600; }
+            .value { color: #f8fafc; font-weight: 700; text-align: right; }
+            .code { font-family: monospace; background: #334155; padding: 2px 6px; border-radius: 4px; color: #38bdf8; }
+            .action-box { background: #0c4a6e; border: 1px solid #0284c7; border-radius: 14px; padding: 16px; margin-bottom: 24px; }
+            .action-box h4 { margin: 0 0 8px; font-size: 13px; color: #7dd3fc; }
+            .action-box ul { margin: 0; padding-left: 18px; font-size: 12px; color: #e0f2fe; line-height: 1.6; }
+            .footer { padding: 18px; text-align: center; font-size: 12px; color: #64748b; background: #0f172a; border-top: 1px solid #1e293b; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="header">
+              <span class="pill pill-blocked">Cobro Cancelado Preventivamente</span>
+              <h1 style="margin-top: 12px;">🚨 Intento de Compra de Plan No Disponible</h1>
+              <p>El cliente intentó comprar un plan que ya no tiene stock o fue retirado en eSIMAccess.</p>
+            </div>
+            <div class="content">
+              <div class="alert-box">
+                <h3>🛡️ Medida de Seguridad Aplicada:</h3>
+                <p>
+                  <strong>No se cobró ningún valor al usuario.</strong> De este modo se evitan reclamos y devoluciones bancarias.
+                  Al cliente se le mostró el mensaje: <em>"El plan no está disponible en este momento. Nuestro equipo técnico lo está verificando"</em>
+                  y se le invitó a explorar planes alternativos.
+                </p>
+              </div>
+
+              <div class="table-box">
+                <div class="row">
+                  <span class="label">Plan Solicitado:</span>
+                  <span class="value">${plan.name}</span>
+                </div>
+                <div class="row">
+                  <span class="label">Código de Paquete (PackageCode):</span>
+                  <span class="value"><span class="code">${packageCode}</span></span>
+                </div>
+                <div class="row">
+                  <span class="label">País / Destino:</span>
+                  <span class="value">${plan.country} (${plan.countryCode || 'N/A'})</span>
+                </div>
+                <div class="row">
+                  <span class="label">Precio del Plan:</span>
+                  <span class="value">€${Number(plan.priceEUR || 0).toFixed(2)} EUR</span>
+                </div>
+                <div class="row">
+                  <span class="label">Cliente Solicitante:</span>
+                  <span class="value">${user.name || 'Cliente'} &lt;${user.email}&gt;</span>
+                </div>
+                <div class="row">
+                  <span class="label">Método de Pago Intentado:</span>
+                  <span class="value">${paymentMethod}</span>
+                </div>
+                <div class="row">
+                  <span class="label">Fecha y Hora:</span>
+                  <span class="value">${attemptedAt}</span>
+                </div>
+                <div class="row">
+                  <span class="label">Motivo reportado por eSIMAccess:</span>
+                  <span class="value" style="color: #fca5a5;">${reason}</span>
+                </div>
+              </div>
+
+              <div class="action-box">
+                <h4>🛠️ Medidas Recomendadas para el Administrador:</h4>
+                <ul>
+                  <li>Verificar en el portal de <strong>eSIMAccess</strong> si el paquete cambió de código o precio.</li>
+                  <li>Ir a tu Panel de Administración &gt; Acciones Rápidas &gt; <strong>"Sincronizar Mayorista API"</strong> para actualizar los paquetes oficiales.</li>
+                  <li>Si el operador descontinuó este plan en ${plan.country}, darlo de baja o reemplazarlo en la base de datos.</li>
+                </ul>
+              </div>
+            </div>
+            <div class="footer">
+              Wappa eSIM Platform • Alertas Automáticas de Pasarela y Mayorista<br />
+              Destinatario: ${targetAdminEmail}
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    });
+
+    console.log(`📧 [Mailer] Alerta de plan no disponible enviada con éxito a ${targetAdminEmail}. MessageId: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (error: any) {
+    console.error(`❌ [Mailer Error] Error enviando alerta de plan no disponible a ${targetAdminEmail}:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+

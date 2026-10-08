@@ -1,0 +1,34 @@
+{
+  "testExecutedAt": "2026-10-08T19:11:51.313Z",
+  "success": true,
+  "report": {
+    "timestamp": "2026-10-08T19:11:49.618Z",
+    "totalActiveEsims": 2,
+    "esimsChecked": 2,
+    "alertsSent": 0,
+    "alertsSimulated": 0,
+    "errors": 0,
+    "details": [
+      {
+        "iccidMasked": "89480...9385",
+        "country": "Venezuela",
+        "userEmailMasked": "b***o@gmail.com",
+        "usedDataGB": 0.422,
+        "totalDataGB": 3,
+        "percentUsed": 14,
+        "hoursLeft": null,
+        "tokenFound": true
+      },
+      {
+        "iccidMasked": "89103...8509",
+        "country": "España",
+        "userEmailMasked": "j***o@gmail.com",
+        "usedDataGB": 0,
+        "totalDataGB": 0.488,
+        "percentUsed": 0,
+        "hoursLeft": null,
+        "tokenFound": false
+      }
+    ]
+  }
+}

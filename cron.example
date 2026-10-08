@@ -1,0 +1,39 @@
+{
+  "description": "Ejemplo de configuración, solicitud y respuesta JSON del Cron de Alertas y Monitoreo Wappa eSIM",
+  "endpoint": "POST https://esim.fans/api/notifications/run-consumption-check",
+  "authMethods": {
+    "bearerToken": "Authorization: Bearer <CRON_SECRET>",
+    "queryParam": "?key=<CRON_SECRET>",
+    "vercelCron": "x-vercel-cron: 1"
+  },
+  "curlExample": "curl -X POST \"https://esim.fans/api/notifications/run-consumption-check?verbose=true\" -H \"Authorization: Bearer tu_cron_secret_aqui\"",
+  "sampleResponse": {
+    "success": true,
+    "message": "Ciclo de monitoreo de consumo y alertas ejecutado con éxito",
+    "summary": {
+      "timestamp": "2026-10-08T12:00:00.000Z",
+      "totalActiveEsims": 5,
+      "esimsChecked": 5,
+      "alertsSent": 1,
+      "alertsSimulated": 0,
+      "errors": 0
+    },
+    "details": [
+      {
+        "iccidMasked": "89501...4321",
+        "country": "Estados Unidos",
+        "userEmailMasked": "m***o@gmail.com",
+        "usedDataGB": 4.5,
+        "totalDataGB": 5.0,
+        "percentUsed": 90,
+        "hoursLeft": 120,
+        "alertTriggered": "90_percent",
+        "tokenFound": true,
+        "pushResult": {
+          "success": true,
+          "messageId": "msg_fcm_simulated"
+        }
+      }
+    ]
+  }
+}

@@ -786,6 +786,9 @@ export default function App() {
             setAuthRedirectReason('Para completar el pago y asociar tu eSIM a tu cuenta');
             setIsAuthModalOpen(true);
           }}
+          onSelectSimilarPlan={(newPlan) => {
+            setSelectedPlanForPurchase(newPlan);
+          }}
         />
       )}
 

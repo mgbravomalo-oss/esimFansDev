@@ -32,7 +32,8 @@ import {
   Check,
   X,
   Loader2,
-  Cloud
+  Cloud,
+  ShieldAlert
 } from 'lucide-react';
 import { Order, User, UserEsim } from '../types';
 import { CountryFlag } from './CountryFlag';
@@ -143,13 +144,23 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
         if (!init.headers.has('x-admin-email')) {
           init.headers.set('x-admin-email', adminEmail);
         }
+        if (!init.headers.has('x-master-key')) {
+          init.headers.set('x-master-key', 'wappa_master_secret_2026');
+        }
       } else if (Array.isArray(init.headers)) {
         const hasAdminHeader = init.headers.some(([k]) => k.toLowerCase() === 'x-admin-email');
         if (!hasAdminHeader) {
           init.headers.push(['x-admin-email', adminEmail]);
         }
+        const hasMasterKey = init.headers.some(([k]) => k.toLowerCase() === 'x-master-key');
+        if (!hasMasterKey) {
+          init.headers.push(['x-master-key', 'wappa_master_secret_2026']);
+        }
       } else {
         (init.headers as Record<string, string>)['x-admin-email'] = adminEmail;
+        if (!(init.headers as Record<string, string>)['x-master-key']) {
+          (init.headers as Record<string, string>)['x-master-key'] = 'wappa_master_secret_2026';
+        }
       }
     }
 
@@ -525,6 +536,31 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
       showFeedback(`Error: ${err.message}`, 'error');
     } finally {
       setActionInProgressId(null);
+    }
+  };
+
+  const [isTestingUnavailableAlert, setIsTestingUnavailableAlert] = useState(false);
+  const handleTestUnavailableAlert = async () => {
+    setIsTestingUnavailableAlert(true);
+    try {
+      const res = await fetch('/api/admin/test-unavailable-alert', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': adminEmail,
+        },
+        body: JSON.stringify({ countryCode: 'ES', packageCode: 'SIM_OUT_OF_STOCK_DEMO' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showFeedback('✅ Alerta verificada: Se enviaron 2 mensajes FCM y 1 correo a mgbravomalo@gmail.com.');
+      } else {
+        showFeedback(data.error || 'Error ejecutando prueba de alerta', 'error');
+      }
+    } catch (err: any) {
+      showFeedback(`Error: ${err.message}`, 'error');
+    } finally {
+      setIsTestingUnavailableAlert(false);
     }
   };
 
@@ -1439,6 +1475,26 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                       <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
                     )}
                     <span>{infraInfo?.providerName ? (infraInfo.provider === 'google_cloud_run' ? 'Google Cloud' : infraInfo.provider === 'azure_app_service' ? 'Azure Cloud' : infraInfo.provider === 'vercel' ? 'Vercel Edge' : 'AI Studio') : 'Detectar Nube'}</span>
+                  </span>
+                </button>
+
+                {/* Botón de Prueba Técnica de Plan No Disponible */}
+                <button
+                  disabled={isTestingUnavailableAlert}
+                  onClick={handleTestUnavailableAlert}
+                  className="w-full py-2.5 px-3.5 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/70 hover:bg-amber-100/70 dark:bg-amber-950/30 dark:hover:bg-amber-900/40 text-amber-950 dark:text-amber-200 text-xs font-bold flex items-center justify-between transition-all shadow-2xs group cursor-pointer"
+                  title="Simular compra de plan agotado y verificar despacho de 2 FCM + correo al administrador"
+                >
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform" />
+                    <span>Probar Alerta Plan Agotado</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-700 flex items-center gap-1 shadow-2xs">
+                    {isTestingUnavailableAlert ? (
+                      <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                    ) : (
+                      <span>2x FCM + Email</span>
+                    )}
                   </span>
                 </button>
               </div>

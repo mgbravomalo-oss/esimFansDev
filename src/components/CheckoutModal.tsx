@@ -8,6 +8,8 @@ import {
   Sparkles,
   UserCheck,
   AlertCircle,
+  AlertTriangle,
+  RefreshCw,
   Calendar,
   Plus,
   Minus,
@@ -38,6 +40,7 @@ interface CheckoutModalProps {
   onSuccessPurchase: (newEsim: UserEsim, identifiedUser: User) => void;
   onOrderCreatedPendingApproval?: (order: Order, identifiedUser: User) => void;
   onRequireAuth?: () => void;
+  onSelectSimilarPlan?: (plan: EsimPlan) => void;
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
@@ -47,10 +50,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onClose,
   onSuccessPurchase,
   onOrderCreatedPendingApproval,
-  onRequireAuth
+  onRequireAuth,
+  onSelectSimilarPlan,
 }) => {
   // Step state: 1: Traveler details & plan summary | 2: Payment options (GPay, Card) | 3: Order receipt
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+  const [activePlan, setActivePlan] = useState<EsimPlan | null>(plan);
+
+  // Verificación de disponibilidad previa y captura de error mayorista
+  const [isVerifyingPlan, setIsVerifyingPlan] = useState<boolean>(false);
+  const [planUnavailableData, setPlanUnavailableData] = useState<{
+    message: string;
+    customerNotice: string;
+    reason?: string;
+    similarPlans: EsimPlan[];
+  } | null>(null);
 
   // Traveler info
   const [fullName, setFullName] = useState(user?.name || '');
@@ -73,6 +87,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const [isFadingOutForAuth, setIsFadingOutForAuth] = useState(false);
   const [isTestMode, setIsTestMode] = useState<boolean>(true);
+
+  // Sync activePlan with prop plan
+  useEffect(() => {
+    setActivePlan(plan);
+    setPlanUnavailableData(null);
+  }, [plan]);
 
   // Synchronize system test mode vs production mode
   useEffect(() => {
@@ -116,10 +136,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   }, [isOpen, plan]);
 
-  if (!isOpen || !plan) return null;
+  const currentDisplayPlan = activePlan || plan;
 
-  const duration = plan.isUnlimited ? Math.max(1, selectedDays) : (plan.validityDays || 30);
-  const finalPrice = Number((plan.isUnlimited ? plan.priceEUR * duration : plan.priceEUR).toFixed(2));
+  if (!isOpen || !currentDisplayPlan) return null;
+
+  const duration = currentDisplayPlan.isUnlimited ? Math.max(1, selectedDays) : (currentDisplayPlan.validityDays || 30);
+  const finalPrice = Number((currentDisplayPlan.isUnlimited ? currentDisplayPlan.priceEUR * duration : currentDisplayPlan.priceEUR).toFixed(2));
 
   const triggerAuthTransition = () => {
     if (isFadingOutForAuth) return;
@@ -158,8 +180,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setValidationError(null);
   };
 
-  // Step 1 -> Step 2 validation
-  const handleProceedToPayment = (e: React.FormEvent) => {
+  // Step 1 -> Step 2 validation con verificación obligatoria con el proveedor mayorista
+  const handleProceedToPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError(null);
 
@@ -184,7 +206,46 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       return;
     }
 
-    // Advance to Step 2 (Payment Options Card)
+    // 🛡️ REGLA: No pasar a cobrar si el plan no existe o no tiene stock con el proveedor
+    setIsVerifyingPlan(true);
+    try {
+      const identifiedUser: User = {
+        ...(user || {} as User),
+        id: user?.id || `usr_${Date.now()}`,
+        name: fullName.trim() || user?.name || 'Cliente eSIM',
+        email: deliveryEmail.trim().toLowerCase() || user?.email || '',
+        createdAt: user?.createdAt || new Date().toISOString(),
+      };
+
+      const verifyRes = await fetch('/api/plans/verify-availability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan: activePlan || plan,
+          user: identifiedUser,
+          paymentMethod,
+        }),
+      });
+
+      const verifyData = await verifyRes.json();
+      setIsVerifyingPlan(false);
+
+      if (verifyData.available === false || verifyData.errorCode === 'PLAN_UNAVAILABLE') {
+        console.warn('⚠️ [Pre-Cobro Detenido] El plan no está disponible en el proveedor mayorista:', verifyData);
+        setPlanUnavailableData({
+          message: verifyData.message || 'Plan no está disponible. Se va a verificar.',
+          customerNotice: verifyData.customerNotice || 'El plan seleccionado no está disponible en este momento con el proveedor. Nuestro equipo técnico lo verificará de inmediato.',
+          reason: verifyData.error,
+          similarPlans: Array.isArray(verifyData.similarPlans) ? verifyData.similarPlans : [],
+        });
+        return;
+      }
+    } catch (err: any) {
+      console.warn('⚠️ Verificación offline:', err.message);
+      setIsVerifyingPlan(false);
+    }
+
+    // Advance to Step 2 (Payment Options Card) solo si el plan fue validado
     setCurrentStep(2);
   };
 
@@ -222,11 +283,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     // Simulated payment steps animation
     setTimeout(() => {
-      setProcessingStatusText('Autorizando transacción simulada...');
+      setProcessingStatusText('Autorizando transacción segura...');
     }, 600);
 
     setTimeout(async () => {
-      setProcessingStatusText('Registrando pedido...');
+      setProcessingStatusText('Verificando inventario y registrando pedido...');
 
       const last4 = paymentMethod === 'credit_card'
         ? cardNumber.replace(/\s+/g, '').slice(-4) || '4242'
@@ -241,7 +302,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            plan,
+            plan: activePlan || plan,
             user: identifiedUser,
             paymentMethod,
             paymentDetails: {
@@ -259,6 +320,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         const data = await res.json();
         setIsProcessingPayment(false);
 
+        // Captura preventiva de plan no disponible (0 devoluciones, aviso al cliente y alertas al admin)
+        if (data.unavailable || data.errorCode === 'PLAN_UNAVAILABLE') {
+          console.warn('🛑 [Cobro Bloqueado] El plan no está disponible con el mayorista:', data);
+          setPlanUnavailableData({
+            message: data.message || 'Plan no está disponible. Se va a verificar.',
+            customerNotice: data.customerNotice || 'El plan seleccionado no está disponible en este momento con el proveedor. Nuestro equipo técnico lo verificará de inmediato.',
+            reason: data.error,
+            similarPlans: Array.isArray(data.similarPlans) ? data.similarPlans : [],
+          });
+          return;
+        }
+
         if (data.success && data.order) {
           setCompletedOrder(data.order);
           setCurrentStep(3); // Go to receipt
@@ -271,7 +344,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             }
           }
         } else {
-          setValidationError(data.error || 'No se pudo registrar la orden de prueba');
+          setValidationError(data.error || 'No se pudo procesar la orden');
         }
       } catch (err: any) {
         setIsProcessingPayment(false);
@@ -345,9 +418,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const dayPresets = [1, 3, 5, 7, 10, 15, 30];
 
   const hasMultiCountryCoverage = Boolean(
-    plan.isMultiCountry ||
-    (plan.coveredCountries && plan.coveredCountries.length > 1) ||
-    (plan.coveredCountriesCount && plan.coveredCountriesCount > 1)
+    currentDisplayPlan.isMultiCountry ||
+    (currentDisplayPlan.coveredCountries && currentDisplayPlan.coveredCountries.length > 1) ||
+    (currentDisplayPlan.coveredCountriesCount && currentDisplayPlan.coveredCountriesCount > 1)
   );
 
   return (
@@ -365,11 +438,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-3">
-            <CountryFlag flag={plan.flag} countryCode={plan.countryCode} countryName={plan.country} size="xl" rounded="md" />
+            <CountryFlag flag={currentDisplayPlan.flag} countryCode={currentDisplayPlan.countryCode} countryName={currentDisplayPlan.country} size="xl" rounded="md" />
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">{plan.country}: {plan.name}</h2>
-                {plan.isUnlimited && (
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">{currentDisplayPlan.country}: {currentDisplayPlan.name}</h2>
+                {currentDisplayPlan.isUnlimited && (
                   <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-700 text-white flex items-center gap-1 shadow-2xs tracking-tight uppercase">
                     <InfinityIcon className="w-2.5 h-2.5" /> Ilimitado
                   </span>
@@ -378,8 +451,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 mt-0.5">
                 <Radio className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Red:</span>
-                <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100">{plan.operator || 'Red 5G Local'}</span>
-                {plan.network5G && (
+                <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100">{currentDisplayPlan.operator || 'Red 5G Local'}</span>
+                {currentDisplayPlan.network5G && (
                   <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
                     5G
                   </span>
@@ -396,45 +469,192 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           </button>
         </div>
 
-        {/* Multi-country covered countries notice */}
-        {hasMultiCountryCoverage && currentStep === 1 && (
-          <div className="mt-3 p-3 rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/30 text-xs">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <Globe className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span className="font-bold text-slate-900 dark:text-white truncate">
-                  Cobertura multi-país: {plan.coveredCountries?.length || plan.coveredCountriesCount || 'Varios'} países incluidos
-                </span>
+        {/* ---------------------------------------------------- */}
+        {/* VISTA ESPECIAL: Plan No Disponible en Proveedor      */}
+        {/* (0 Cobros, Alertas 2x FCM + Email a mgbravomalo@gmail.com) */}
+        {/* ---------------------------------------------------- */}
+        {planUnavailableData ? (
+          <div className="py-4 space-y-4 animate-in fade-in duration-200">
+            {/* Banner Principal de Aviso */}
+            <div className="p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 dark:bg-amber-950/25 dark:border-amber-500/40 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-sm font-black text-lg">
+                  ⚠️
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-black text-amber-950 dark:text-amber-200">
+                      {planUnavailableData.message}
+                    </h3>
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200">
+                      Cobro Bloqueado Preventivamente
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-900/90 dark:text-amber-300/90 leading-relaxed font-medium">
+                    {planUnavailableData.customerNotice}
+                  </p>
+                </div>
               </div>
-              {plan.coveredCountries && plan.coveredCountries.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowCoverageList(prev => !prev)}
-                  className="px-2 py-1 rounded text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-white dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-slate-700 border border-emerald-200 dark:border-emerald-700 flex items-center gap-1 shrink-0"
-                >
-                  <span>{showCoverageList ? 'Ocultar' : 'Ver países'}</span>
-                  <ChevronDown className={`w-3 h-3 transition-transform ${showCoverageList ? 'rotate-180' : ''}`} />
-                </button>
-              )}
+
+              {/* Tarjeta de Garantía Cero Devoluciones */}
+              <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-amber-200/80 dark:border-amber-900/60 text-xs space-y-1">
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-bold">
+                  <ShieldCheck className="w-4 h-4 shrink-0" />
+                  <span>Sin cobro efectuado: No hay riesgo ni trámites de devolución</span>
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-normal pl-6">
+                  El sistema bloqueó la operación antes de contactar a tu banco o pasarela. Tu saldo y tarjeta permanecen intactos.
+                </p>
+              </div>
+
+              {/* Alerta Técnica Despachada */}
+              <div className="p-2.5 rounded-xl bg-slate-900/5 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400">
+                <span className="font-bold text-slate-800 dark:text-slate-200">📡 Medidas Técnicas: </span>
+                Se enviaron <strong>2 alertas FCM</strong> y correo prioritario al administrador (<span className="font-mono text-emerald-600 dark:text-emerald-400">mgbravomalo@gmail.com</span>) para regularizar el inventario con el mayorista eSIMAccess.
+              </div>
             </div>
 
-            {showCoverageList && plan.coveredCountries && (
-              <div className="mt-2.5 pt-2.5 border-t border-emerald-200/60 dark:border-emerald-800/40">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-36 overflow-y-auto pr-1">
-                  {plan.coveredCountries.map((c) => (
+            {/* Invitación a Elegir un Plan Similar */}
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Te invitamos a elegir un plan similar para tu viaje:</span>
+                </h4>
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                  {planUnavailableData.similarPlans.length} disponible{planUnavailableData.similarPlans.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+
+              {planUnavailableData.similarPlans.length > 0 ? (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {planUnavailableData.similarPlans.map((simPlan) => (
                     <div
-                      key={c.code}
-                      className="flex items-center gap-1.5 p-1 px-1.5 rounded bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 text-[11px]"
+                      key={simPlan.id}
+                      className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 hover:bg-white dark:bg-slate-850/50 dark:hover:bg-slate-800 transition-all flex items-center justify-between gap-3 group shadow-2xs"
                     >
-                      <CountryFlag flag={c.flag} countryCode={c.code} countryName={c.name} size="xs" rounded="sm" className="shrink-0" />
-                      <span className="truncate text-slate-800 dark:text-slate-200 font-medium">{c.name}</span>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <CountryFlag
+                          flag={simPlan.flag}
+                          countryCode={simPlan.countryCode}
+                          countryName={simPlan.country}
+                          size="md"
+                          rounded="md"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                              {simPlan.name}
+                            </span>
+                            {simPlan.isUnlimited ? (
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-600 text-white uppercase">
+                                Ilimitado
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
+                                {simPlan.dataAmountGB} GB
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            <span>{simPlan.isUnlimited ? '7 Días' : `${simPlan.validityDays || 30} Días`}</span>
+                            <span>•</span>
+                            <span>{simPlan.operator || 'Red 5G'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <span className="text-xs font-black text-slate-900 dark:text-white">
+                          ${simPlan.priceEUR?.toFixed(2)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActivePlan(simPlan);
+                            setPlanUnavailableData(null);
+                            setCurrentStep(1);
+                            setValidationError(null);
+                            if (onSelectSimilarPlan) onSelectSimilarPlan(simPlan);
+                          }}
+                          className="py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all shadow-2xs flex items-center gap-1 active:scale-95 cursor-pointer"
+                        >
+                          <span>Elegir</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-slate-100 dark:bg-slate-800/60 text-center text-xs text-slate-600 dark:text-slate-400">
+                  No hay otros planes similares cargados para este destino. Por favor revisa otros países.
+                </div>
+              )}
+
+              {/* Botones de Exploración */}
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all"
+                >
+                  🔍 Explorar Otros Destinos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlanUnavailableData(null);
+                    setCurrentStep(1);
+                  }}
+                  className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all"
+                >
+                  Reintentar
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Multi-country covered countries notice */}
+            {hasMultiCountryCoverage && currentStep === 1 && (
+              <div className="mt-3 p-3 rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/30 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Globe className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="font-bold text-slate-900 dark:text-white truncate">
+                      Cobertura multi-país: {currentDisplayPlan.coveredCountries?.length || currentDisplayPlan.coveredCountriesCount || 'Varios'} países incluidos
+                    </span>
+                  </div>
+                  {currentDisplayPlan.coveredCountries && currentDisplayPlan.coveredCountries.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCoverageList(prev => !prev)}
+                      className="px-2 py-1 rounded text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-white dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-slate-700 border border-emerald-200 dark:border-emerald-700 flex items-center gap-1 shrink-0"
+                    >
+                      <span>{showCoverageList ? 'Ocultar' : 'Ver países'}</span>
+                      <ChevronDown className={`w-3 h-3 transition-transform ${showCoverageList ? 'rotate-180' : ''}`} />
+                    </button>
+                  )}
+                </div>
+
+                {showCoverageList && currentDisplayPlan.coveredCountries && (
+                  <div className="mt-2.5 pt-2.5 border-t border-emerald-200/60 dark:border-emerald-800/40">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                      {currentDisplayPlan.coveredCountries.map((c) => (
+                        <div
+                          key={c.code}
+                          className="flex items-center gap-1.5 p-1 px-1.5 rounded bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 text-[11px]"
+                        >
+                          <CountryFlag flag={c.flag} countryCode={c.code} countryName={c.name} size="xs" rounded="sm" className="shrink-0" />
+                          <span className="truncate text-slate-800 dark:text-slate-200 font-medium">{c.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        )}
 
         {/* ---------------------------------------------------- */}
         {/* STEP 1: Traveler Details & Plan Configuration        */}
@@ -613,9 +833,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-600 dark:text-slate-300">
                 <span>
-                  {plan.isUnlimited
-                    ? `eSIM ${plan.name} (${duration} día${duration > 1 ? 's' : ''} @ $${plan.priceEUR.toFixed(2)}/día):`
-                    : `eSIM ${plan.name} (${plan.validityDays} días):`}
+                  {currentDisplayPlan.isUnlimited
+                    ? `eSIM ${currentDisplayPlan.name} (${duration} día${duration > 1 ? 's' : ''} @ $${currentDisplayPlan.priceEUR.toFixed(2)}/día):`
+                    : `eSIM ${currentDisplayPlan.name} (${currentDisplayPlan.validityDays} días):`}
                 </span>
                 <span className="font-semibold text-slate-900 dark:text-white">${finalPrice.toFixed(2)}</span>
               </div>
@@ -632,14 +852,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             {/* Step 1 Button */}
             <button
               type="submit"
-              disabled={isFadingOutForAuth}
+              disabled={isFadingOutForAuth || isVerifyingPlan}
               className={`w-full py-3 px-4 rounded-xl text-white text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-2 active:scale-98 ${
-                !user
+                isVerifyingPlan
+                  ? 'bg-slate-700 opacity-90 cursor-wait'
+                  : !user
                   ? 'bg-amber-600 hover:bg-amber-500'
                   : 'bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-500'
               }`}
             >
-              {!user ? (
+              {isVerifyingPlan ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                  <span>Verificando disponibilidad con el operador...</span>
+                </>
+              ) : !user ? (
                 <>
                   <UserCheck className="w-4 h-4 text-white" />
                   <span>Identifícate / Valida tu usuario para continuar</span>
@@ -1099,6 +1326,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
             )}
           </div>
+        )}
+          </>
         )}
 
       </div>

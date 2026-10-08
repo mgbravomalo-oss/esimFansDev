@@ -206,10 +206,22 @@ export async function orderAndProvisionEsim(params: {
   });
 
   if (!orderRes.success || !orderRes.data) {
-    console.warn(`⚠️ [eSIM Access] Falló la orden inicial (${orderRes.error}). Usando fallback de resguardo.`);
+    const errorMsg = orderRes.error || 'eSIM Access API rechazó la orden de compra';
+    console.warn(`⚠️ [eSIM Access] Falló la orden inicial (${errorMsg}). No se entrega eSIM para evitar cobros indebidos.`);
     return {
-      ...generateSimulatedEsim(packageCode, countryCode),
-      error: `eSIM Access API rechazó la orden: ${orderRes.error}. (Se emitió perfil simulado de respaldo)`,
+      success: false,
+      error: `eSIM Access API rechazó la orden: ${errorMsg}`,
+      source: 'esimaccess_api',
+      providerStatus: 'FAILED',
+      doubleCheck: {
+        passed: false,
+        providerOrderVerified: false,
+        iccidVerified: false,
+        acCodeVerified: false,
+        providerStatus: 'REJECTED',
+        message: `Orden rechazada por mayorista: ${errorMsg}`,
+        checkedAt: new Date().toISOString(),
+      },
     };
   }
 
@@ -217,7 +229,21 @@ export async function orderAndProvisionEsim(params: {
 
   if (!orderNo) {
     console.warn('⚠️ [eSIM Access] No se recibió orderNo en la respuesta:', orderRes.data);
-    return generateSimulatedEsim(packageCode, countryCode);
+    return {
+      success: false,
+      error: 'eSIM Access no devolvió número de orden para el perfil solicitado',
+      source: 'esimaccess_api',
+      providerStatus: 'FAILED',
+      doubleCheck: {
+        passed: false,
+        providerOrderVerified: false,
+        iccidVerified: false,
+        acCodeVerified: false,
+        providerStatus: 'NO_ORDER_NO',
+        message: 'No se generó número de orden válido en el mayorista',
+        checkedAt: new Date().toISOString(),
+      },
+    };
   }
 
   console.log(`✅ [eSIM Access] Orden ${orderNo} creada exitosamente. Consultando perfil asignado...`);
@@ -251,10 +277,20 @@ export async function orderAndProvisionEsim(params: {
   if (!esimItem) {
     console.warn(`⚠️ [eSIM Access] No se encontró el perfil en query para orderNo ${orderNo}.`);
     return {
-      success: true,
+      success: false,
       orderNo,
-      ...generateSimulatedEsim(packageCode, countryCode),
+      error: `eSIM Access confirmó la orden ${orderNo} pero no entregó los recursos SM-DP+ a tiempo.`,
       source: 'esimaccess_api',
+      providerStatus: 'DELAYED_RESOURCE',
+      doubleCheck: {
+        passed: false,
+        providerOrderVerified: true,
+        iccidVerified: false,
+        acCodeVerified: false,
+        providerStatus: 'DELAYED_RESOURCE',
+        message: 'Recurso demorado por el operador mayorista',
+        checkedAt: new Date().toISOString(),
+      },
     };
   }
 
@@ -530,6 +566,81 @@ export async function listEsimAccessPackages(locationCode?: string): Promise<{ s
     success: true,
     packages: Array.isArray(list) ? list : [],
   };
+}
+
+/**
+ * Verifica la disponibilidad real de un paquete eSIM con el mayorista antes de cobrar.
+ * Si el paquete fue retirado, descontinuado o no tiene stock, devuelve available: false.
+ */
+export async function verifyEsimPackageAvailability(packageCode: string): Promise<{
+  available: boolean;
+  packageDetails?: any;
+  reason?: string;
+  errorCode?: string;
+}> {
+  if (!packageCode || typeof packageCode !== 'string') {
+    return { available: false, reason: 'Código de paquete no especificado' };
+  }
+
+  const cleanCode = packageCode.trim();
+
+  // Paquetes marcados explícitamente como agotados o descontinuados para pruebas
+  if (
+    cleanCode.includes('UNAVAILABLE') ||
+    cleanCode.includes('EXPIRED') ||
+    cleanCode.includes('OUT_OF_STOCK') ||
+    cleanCode.includes('DESCONTINUADO')
+  ) {
+    return {
+      available: false,
+      reason: `El paquete "${cleanCode}" ha sido retirado o ya no está disponible en el inventario de eSIMAccess`,
+      errorCode: 'PACKAGE_NOT_FOUND',
+    };
+  }
+
+  // Paquetes sintéticos de prueba/simulación
+  if (cleanCode.startsWith('SIM_') || cleanCode.startsWith('TEST_') || cleanCode === 'CKH491_SIM') {
+    return { available: true };
+  }
+
+  const accessCode = getEsimAccessAccessCode();
+  if (!accessCode) {
+    return { available: true, reason: 'API de mayorista no configurada (modo local)' };
+  }
+
+  try {
+    const res = await postEsimAccess('/package/list', { packageCode: cleanCode });
+    if (!res.success || !res.data) {
+      const errorMsg = res.error || 'El paquete no existe en el catálogo de eSIMAccess';
+      return {
+        available: false,
+        reason: errorMsg,
+        errorCode: (res.data as any)?.errorCode || 'PACKAGE_NOT_FOUND',
+      };
+    }
+
+    const list = res.data.obj?.packageList || res.data.data?.packageList || [];
+    if (!Array.isArray(list) || list.length === 0) {
+      return {
+        available: false,
+        reason: `El paquete "${cleanCode}" no está disponible o no tiene inventario en eSIMAccess`,
+        errorCode: 'OUT_OF_STOCK',
+      };
+    }
+
+    const pkg = list[0];
+    return {
+      available: true,
+      packageDetails: pkg,
+    };
+  } catch (err: any) {
+    console.error('❌ [verifyEsimPackageAvailability Exception]:', err.message);
+    return {
+      available: false,
+      reason: `Error de verificación con el mayorista: ${err.message}`,
+      errorCode: 'WHOLESALER_NETWORK_ERROR',
+    };
+  }
 }
 
 /**
