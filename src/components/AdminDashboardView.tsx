@@ -31,7 +31,8 @@ import {
   Copy,
   Check,
   X,
-  Loader2
+  Loader2,
+  Cloud
 } from 'lucide-react';
 import { Order, User, UserEsim } from '../types';
 import { CountryFlag } from './CountryFlag';
@@ -104,6 +105,11 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const [isTestMode, setIsTestMode] = useState<boolean>(true);
   const [requireAdminApproval, setRequireAdminApproval] = useState<boolean>(true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  // Active Cloud Infrastructure state (Google Cloud Run vs Azure vs Vercel vs Sandbox)
+  const [infraInfo, setInfraInfo] = useState<any>(null);
+  const [isLoadingInfra, setIsLoadingInfra] = useState<boolean>(false);
+  const [showInfraModal, setShowInfraModal] = useState<boolean>(false);
 
   // Action status feedback
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -272,6 +278,24 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
       console.warn('Error fetching db status:', err);
     } finally {
       setIsLoadingDb(false);
+    }
+  };
+
+  const fetchInfrastructure = async (openModal = false) => {
+    setIsLoadingInfra(true);
+    try {
+      const res = await fetch('/api/admin/infrastructure');
+      if (res.ok) {
+        const data = await res.json();
+        setInfraInfo(data);
+        if (openModal) {
+          setShowInfraModal(true);
+        }
+      }
+    } catch (err: any) {
+      console.warn('Error fetching infrastructure:', err);
+    } finally {
+      setIsLoadingInfra(false);
     }
   };
 
@@ -760,6 +784,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 
   useEffect(() => {
     fetchDbStatus();
+    fetchInfrastructure();
   }, []);
 
   useEffect(() => {
@@ -1387,6 +1412,34 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isLoadingDb ? 'animate-spin' : ''}`} />
                   <span>Recargar Estado de Red</span>
+                </button>
+
+                {/* Cloud Infrastructure Identifier Button */}
+                <button
+                  onClick={() => fetchInfrastructure(true)}
+                  className="w-full py-2.5 px-3.5 rounded-xl border border-sky-200 dark:border-sky-900/60 bg-sky-50/80 hover:bg-sky-100/80 dark:bg-sky-950/30 dark:hover:bg-sky-900/40 text-sky-900 dark:text-sky-200 text-xs font-bold flex items-center justify-between transition-all shadow-2xs group cursor-pointer"
+                  title="Detectar si estás conectado en Google Cloud Run, Azure o Vercel"
+                >
+                  <div className="flex items-center gap-2">
+                    <Cloud className="w-4 h-4 text-sky-600 dark:text-sky-400 group-hover:scale-110 transition-transform" />
+                    <span>¿En qué Nube estoy?</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-1.5 shadow-2xs ${
+                    infraInfo?.provider === 'google_cloud_run'
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
+                      : infraInfo?.provider === 'azure_app_service'
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+                      : infraInfo?.provider === 'vercel'
+                      ? 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300 border border-violet-300 dark:border-violet-700'
+                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
+                  }`}>
+                    {isLoadingInfra ? (
+                      <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                    ) : (
+                      <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                    )}
+                    <span>{infraInfo?.providerName ? (infraInfo.provider === 'google_cloud_run' ? 'Google Cloud' : infraInfo.provider === 'azure_app_service' ? 'Azure Cloud' : infraInfo.provider === 'vercel' ? 'Vercel Edge' : 'AI Studio') : 'Detectar Nube'}</span>
+                  </span>
                 </button>
               </div>
             </div>
@@ -3409,6 +3462,223 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                 className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-colors"
               >
                 Cerrar Ficha
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Cloud Infrastructure Identifier Modal */}
+      {showInfraModal && (
+        <div className="fixed inset-0 z-55 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowInfraModal(false)}>
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-scale-up" onClick={(e) => e.stopPropagation()}>
+            
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-sky-100 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400">
+                  <Cloud className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                    Identificador de Infraestructura Activa
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Telemetría en tiempo real del servidor y plataforma en la que estás navegando
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowInfraModal(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-5 overflow-y-auto">
+              
+              {/* Main Badge Card */}
+              <div className={`p-4 rounded-2xl border flex items-start gap-3.5 ${
+                infraInfo?.provider === 'google_cloud_run'
+                  ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60'
+                  : infraInfo?.provider === 'azure_app_service'
+                  ? 'bg-blue-50/80 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/60'
+                  : infraInfo?.provider === 'vercel'
+                  ? 'bg-violet-50/80 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800/60'
+                  : 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60'
+              }`}>
+                <div className="text-2xl mt-0.5">
+                  {infraInfo?.provider === 'google_cloud_run' ? '🟢' : infraInfo?.provider === 'azure_app_service' ? '🔵' : infraInfo?.provider === 'vercel' ? '▲' : '🧪'}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Nube en Ejecución Actual
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                      Uptime: {Math.floor((infraInfo?.uptimeSeconds || 0) / 60)} min
+                    </span>
+                  </div>
+                  <h4 className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                    {infraInfo?.providerName || 'Identificando...'}
+                  </h4>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                    {infraInfo?.provider === 'google_cloud_run' && 'Estás conectado al contenedor serverless en Google Cloud Platform (Cloud Run).'}
+                    {infraInfo?.provider === 'azure_app_service' && 'Estás conectado a Microsoft Azure App Service (Linux Web App).'}
+                    {infraInfo?.provider === 'vercel' && 'Estás conectado a la red global de Vercel Edge / Serverless.'}
+                    {infraInfo?.provider === 'ai_studio_sandbox' && 'Estás conectado al entorno de previsualización y desarrollo interactivo de Google AI Studio Sandbox.'}
+                    {infraInfo?.provider === 'local_development' && 'Estás conectado a tu entorno de desarrollo local (localhost).'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Host and Current URL info */}
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/60 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500 font-bold">Dominio / Host Actual:</span>
+                  <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                    <span>{typeof window !== 'undefined' ? window.location.host : (infraInfo?.currentHost || 'Desconocido')}</span>
+                    <button
+                      onClick={() => {
+                        if (typeof window !== 'undefined') {
+                          navigator.clipboard.writeText(window.location.origin);
+                          setCopiedField('host');
+                          setTimeout(() => setCopiedField(null), 2000);
+                        }
+                      }}
+                      className="p-0.5 hover:text-emerald-500 text-slate-400 cursor-pointer"
+                      title="Copiar URL"
+                    >
+                      {copiedField === 'host' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200 dark:border-slate-700/50">
+                  <span className="text-slate-500 font-bold">Base de Datos Conectada:</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <Database className="w-3.5 h-3.5" />
+                    {dbStatus?.activeProvider === 'd1' ? 'Cloudflare D1 (SQLite)' : 'MongoDB Atlas (plan.esim_packages)'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200 dark:border-slate-700/50">
+                  <span className="text-slate-500 font-bold">Modo del Sistema:</span>
+                  <span className={`font-bold ${isTestMode ? 'text-amber-500' : 'text-emerald-500'}`}>
+                    {isTestMode ? '🧪 Pruebas (Simulado)' : '🚀 Producción en Vivo'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Direct links to your clouds */}
+              <div className="space-y-2">
+                <h5 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Accesos Directos a tus Nubes (para no equivocarte de pestaña):</span>
+                </h5>
+
+                <div className="grid grid-cols-1 gap-2">
+                  
+                  {/* Google Cloud Run Card */}
+                  <a
+                    href="https://esimfans.cloud.run"
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`p-3 rounded-xl border flex items-center justify-between transition-all group ${
+                      infraInfo?.provider === 'google_cloud_run'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 ring-2 ring-emerald-500/20'
+                        : 'bg-white dark:bg-slate-850 border-slate-200 dark:border-slate-750 hover:border-emerald-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-lg">🟢</span>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white">Google Cloud Run</span>
+                          {infraInfo?.provider === 'google_cloud_run' && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-600 text-white uppercase">Estás aquí</span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-slate-400 font-mono block">esimfans.cloud.run</span>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+                  </a>
+
+                  {/* Microsoft Azure Card */}
+                  <a
+                    href="https://esimfans-app-c5c6gwd9ezc6gwg5.westus3-01.azurewebsites.net"
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`p-3 rounded-xl border flex items-center justify-between transition-all group ${
+                      infraInfo?.provider === 'azure_app_service'
+                        ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 ring-2 ring-blue-500/20'
+                        : 'bg-white dark:bg-slate-850 border-slate-200 dark:border-slate-750 hover:border-blue-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-lg">🔵</span>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white">Microsoft Azure</span>
+                          {infraInfo?.provider === 'azure_app_service' && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-blue-600 text-white uppercase">Estás aquí</span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-slate-400 font-mono block truncate max-w-[280px]">esimfans-app...azurewebsites.net</span>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                  </a>
+
+                  {/* Vercel Card */}
+                  <a
+                    href="https://esimfans.vercel.app"
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`p-3 rounded-xl border flex items-center justify-between transition-all group ${
+                      infraInfo?.provider === 'vercel'
+                        ? 'bg-violet-50 dark:bg-violet-950/40 border-violet-300 dark:border-violet-700 ring-2 ring-violet-500/20'
+                        : 'bg-white dark:bg-slate-850 border-slate-200 dark:border-slate-755 hover:border-violet-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-lg">▲</span>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white">Vercel</span>
+                          {infraInfo?.provider === 'vercel' && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-violet-600 text-white uppercase">Estás aquí</span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-slate-400 font-mono block">esimfans.vercel.app</span>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-violet-500 transition-colors" />
+                  </a>
+
+                </div>
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex items-center justify-between">
+              <button
+                onClick={() => fetchInfrastructure(false)}
+                className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 hover:bg-slate-50 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingInfra ? 'animate-spin' : ''}`} />
+                <span>Revalidar Nube</span>
+              </button>
+              <button
+                onClick={() => setShowInfraModal(false)}
+                className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors cursor-pointer"
+              >
+                Cerrar
               </button>
             </div>
 

@@ -611,6 +611,95 @@ app.post('/api/admin/dual-write', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/admin/infrastructure - Identify which cloud platform (Google Cloud, Azure, Vercel, Sandbox) the app is running on
+app.get('/api/admin/infrastructure', async (req: Request, res: Response) => {
+  try {
+    const host = req.headers.host || '';
+    const forwardedHost = (req.headers['x-forwarded-host'] as string) || host;
+
+    let provider: 'google_cloud_run' | 'azure_app_service' | 'vercel' | 'ai_studio_sandbox' | 'local_development' = 'local_development';
+    let providerName = 'Desarrollo Local';
+    let badgeColor = 'slate';
+    let details: Record<string, any> = {};
+
+    // 1. Google Cloud Run detection
+    const isCloudRun = Boolean(process.env.K_SERVICE || process.env.CLOUD_RUN_JOB || forwardedHost.includes('.run.app') || forwardedHost.includes('.cloud.run'));
+    // 2. Azure App Service / Container Apps detection
+    const isAzure = Boolean(process.env.WEBSITE_SITE_NAME || process.env.CONTAINER_APP_NAME || forwardedHost.includes('.azurewebsites.net') || forwardedHost.includes('.azurecontainerapps.io'));
+    // 3. Vercel detection
+    const isVercel = Boolean(process.env.VERCEL || forwardedHost.includes('.vercel.app'));
+    // 4. AI Studio Sandbox vs Production Cloud Run
+    const isAiStudio = Boolean(
+      (process.env.K_SERVICE && (process.env.K_SERVICE.startsWith('ais-dev') || process.env.K_SERVICE.startsWith('ais-pre'))) ||
+      forwardedHost.includes('ais-dev-') ||
+      forwardedHost.includes('ais-pre-') ||
+      forwardedHost.includes('googleusercontent.com')
+    );
+
+    if (isAiStudio) {
+      provider = 'ai_studio_sandbox';
+      providerName = 'Google AI Studio (Sandbox Preview)';
+      badgeColor = 'amber';
+      details = {
+        platform: 'Google Cloud (AI Studio Sandbox)',
+        domain: forwardedHost,
+        port: process.env.PORT || 3000,
+        purpose: 'Entorno de Pruebas y Desarrollo',
+      };
+    } else if (isCloudRun) {
+      provider = 'google_cloud_run';
+      providerName = 'Google Cloud Run';
+      badgeColor = 'emerald';
+      details = {
+        platform: 'Google Cloud Platform (GCP)',
+        service: process.env.K_SERVICE || 'esimfans',
+        revision: process.env.K_REVISION || 'Última revisión activa',
+        domain: forwardedHost,
+        region: process.env.CLOUD_RUN_REGION || 'us-east5 / us-central1',
+      };
+    } else if (isAzure) {
+      provider = 'azure_app_service';
+      providerName = 'Microsoft Azure (App Service)';
+      badgeColor = 'blue';
+      details = {
+        platform: 'Microsoft Azure Cloud',
+        siteName: process.env.WEBSITE_SITE_NAME || 'esimfans-app',
+        domain: process.env.WEBSITE_HOSTNAME || forwardedHost,
+        sku: process.env.WEBSITE_SKU || 'Linux App Service Plan',
+      };
+    } else if (isVercel) {
+      provider = 'vercel';
+      providerName = 'Vercel Edge / Serverless';
+      badgeColor = 'violet';
+      details = {
+        platform: 'Vercel Global Edge Network',
+        domain: process.env.VERCEL_URL || forwardedHost,
+        environment: process.env.VERCEL_ENV || 'production',
+      };
+    } else {
+      details = {
+        platform: 'Node.js Local Server',
+        domain: forwardedHost,
+        nodeEnv: process.env.NODE_ENV || 'development',
+      };
+    }
+
+    res.json({
+      success: true,
+      provider,
+      providerName,
+      badgeColor,
+      currentHost: forwardedHost,
+      fullUrl: `${req.protocol}://${forwardedHost}`,
+      details,
+      uptimeSeconds: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/admin/database-proof', async (_req: Request, res: Response) => {
   try {
     const proof = await getDatabaseProof();
