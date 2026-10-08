@@ -95,6 +95,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     let timeoutId: NodeJS.Timeout;
 
     const initGsi = () => {
+      if (gsiInitialized) return;
+      gsiInitialized = true;
+
       if (typeof window !== 'undefined' && window.google?.accounts?.id && googleClientId) {
         try {
           window.google.accounts.id.initialize({
@@ -107,12 +110,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             auto_select: false,
             cancel_on_tap_outside: true,
           });
-          gsiInitialized = true;
         } catch (err: any) {
+          gsiInitialized = false; // Reset on error
           console.warn('Error al inicializar Google Identity Services ID:', err);
         }
       } else if (typeof window !== 'undefined' && !window.google?.accounts) {
+        gsiInitialized = false; // Reset to allow retry
         timeoutId = setTimeout(initGsi, 300);
+      } else {
+        gsiInitialized = false; // Reset if conditions not met
       }
     };
 
