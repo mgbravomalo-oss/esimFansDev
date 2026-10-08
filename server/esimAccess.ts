@@ -112,7 +112,11 @@ function getBaseUrl(): string {
 }
 
 export function getEsimAccessAccessCode(): string | null {
-  const code = (process.env.ESIMACCESS_ACCESS_CODE || process.env.ESIM_ACCESS_CODE || '').trim();
+  const code = (
+    process.env.ESIMACCESS_ACCESS_CODE ||
+    process.env.ESIM_ACCESS_CODE ||
+    '38f030c49baf4a0fb9eff8a99b550641'
+  ).trim();
   return code.length > 0 ? code : null;
 }
 

@@ -1,4 +1,4 @@
 {
-  "isTestMode": true,
+  "isTestMode": false,
   "requireAdminApproval": true
 }
