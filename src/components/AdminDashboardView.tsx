@@ -30,7 +30,8 @@ import {
   Sparkles,
   Copy,
   Check,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 import { Order, User, UserEsim } from '../types';
 import { CountryFlag } from './CountryFlag';
@@ -262,9 +263,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
         if (typeof data.dualWriteEnabled === 'boolean') {
           setIsDualWriteEnabled(data.dualWriteEnabled);
         }
-        if (data.success && data.diagnostics) {
-          setIsTestMode(data.settings?.isTestMode ?? true);
-          setRequireAdminApproval(data.settings?.requireAdminApproval ?? true);
+        if (data.success && data.settings) {
+          setIsTestMode(Boolean(data.settings.isTestMode));
+          setRequireAdminApproval(Boolean(data.settings.requireAdminApproval));
         }
       }
     } catch (err: any) {
@@ -407,33 +408,48 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const handleUpdateSettings = async (updates: { isTestMode?: boolean; requireAdminApproval?: boolean }) => {
     setIsSavingSettings(true);
     try {
-      const res = await fetch('/api/admin/settings', {
+      const token = localStorage.getItem('token') || localStorage.getItem('auth_token') || '';
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-admin-email': adminEmail,
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`/api/admin/settings?adminEmail=${encodeURIComponent(adminEmail)}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           ...updates,
           adminEmail,
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.settings) {
+        setIsTestMode(Boolean(data.settings.isTestMode));
+        setRequireAdminApproval(Boolean(data.settings.requireAdminApproval));
         if (updates.isTestMode !== undefined) {
-          setIsTestMode(updates.isTestMode);
           showFeedback(
-            updates.isTestMode
+            data.settings.isTestMode
               ? '🧪 Modo de Pruebas (Simulado): Transacciones ficticias sin cargo real activadas.'
-              : '⚠️ Modo Producción: Solicitudes se enviarán de forma real al mayorista eSIM Access.'
+              : '🚀 Modo Producción Real: Solicitudes se enviarán al mayorista eSIM Access.'
           );
         }
         if (updates.requireAdminApproval !== undefined) {
-          setRequireAdminApproval(updates.requireAdminApproval);
           showFeedback(
-            updates.requireAdminApproval
+            data.settings.requireAdminApproval
               ? '🔒 Aprobación Manual: Cada eSIM comprada requerirá aprobación administrativa para activarse.'
               : '⚡ Aprobación Directa: eSIMs se activan e instalan automáticamente en modo de prueba.'
           );
         }
-        fetchDbStatus();
+      } else if (data.success) {
+        if (updates.isTestMode !== undefined) {
+          setIsTestMode(updates.isTestMode);
+        }
+        if (updates.requireAdminApproval !== undefined) {
+          setRequireAdminApproval(updates.requireAdminApproval);
+        }
       } else {
         showFeedback(data.error || 'No se pudieron actualizar los ajustes.', 'error');
       }
@@ -1402,13 +1418,20 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                 <button
                   disabled={isSavingSettings}
                   onClick={() => handleUpdateSettings({ isTestMode: !isTestMode })}
-                  className={`w-full py-2 px-4 rounded-xl font-bold text-xs shadow-2xs transition-colors ${
+                  className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs shadow-2xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-50 ${
                     isTestMode
                       ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
-                      : 'bg-slate-900 hover:bg-slate-850 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20'
                   }`}
                 >
-                  {isTestMode ? 'Desactivar Modo Simulación (Pasar a Producción)' : 'Activar Modo Simulación (Proteger Balance)'}
+                  {isSavingSettings ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Guardando en Base de Datos...</span>
+                    </>
+                  ) : (
+                    <span>{isTestMode ? '⚡ Desactivar Modo Simulación (Pasar a Producción)' : '🛡️ Activar Modo Simulación (Proteger Balance)'}</span>
+                  )}
                 </button>
               </div>
 

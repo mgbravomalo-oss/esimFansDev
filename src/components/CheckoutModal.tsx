@@ -72,6 +72,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
 
   const [isFadingOutForAuth, setIsFadingOutForAuth] = useState(false);
+  const [isTestMode, setIsTestMode] = useState<boolean>(true);
+
+  // Synchronize system test mode vs production mode
+  useEffect(() => {
+    if (isOpen) {
+      fetch('/api/system/settings')
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.success && typeof data.isTestMode === 'boolean') {
+            setIsTestMode(data.isTestMode);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
 
   // Synchronize name and email whenever the validated user changes
   useEffect(() => {
@@ -234,8 +249,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               cardBrand,
               cardHolderName: cardHolder || fullName,
               walletAccount: identifiedUser.email,
-              transactionId: `TXN-FAKE-${Date.now()}`,
-              isSimulated: true,
+              transactionId: isTestMode ? `TXN-FAKE-${Date.now()}` : `TXN-PROD-${Date.now()}`,
+              isSimulated: isTestMode,
             },
             durationDays: duration,
           }),
@@ -645,18 +660,32 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         {currentStep === 2 && (
           <div className="py-2 space-y-4 animate-in fade-in duration-200">
             
-            {/* Sandbox Notice Banner */}
-            <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 flex items-start gap-2.5">
-              <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
-              <div className="text-xs">
-                <span className="font-extrabold text-purple-900 dark:text-purple-200 block">
-                  Simulación de Pasarela de Pago (Entorno de Pruebas Seguro)
-                </span>
-                <span className="text-purple-700 dark:text-purple-300 text-[11px] leading-tight block mt-0.5">
-                  Puedes probar pagos con Google Pay o Tarjeta sin cargos bancarios reales ni compras al mayorista.
-                </span>
+            {/* Mode Notice Banner */}
+            {isTestMode ? (
+              <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <span className="font-extrabold text-purple-900 dark:text-purple-200 block">
+                    Simulación de Pasarela de Pago (Entorno de Pruebas Seguro)
+                  </span>
+                  <span className="text-purple-700 dark:text-purple-300 text-[11px] leading-tight block mt-0.5">
+                    Puedes probar pagos con Google Pay o Tarjeta sin cargos bancarios reales ni compras al mayorista.
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-start gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <span className="font-extrabold text-emerald-900 dark:text-emerald-200 block">
+                    Pasarela de Pago Segura (Entorno de Producción Oficial)
+                  </span>
+                  <span className="text-emerald-700 dark:text-emerald-300 text-[11px] leading-tight block mt-0.5">
+                    Transacción cifrada TLS de 256 bits. El perfil eSIM oficial se emitirá de forma real al confirmar.
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Amount to pay badge */}
             <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between">
@@ -782,7 +811,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <div className="p-3.5 rounded-xl bg-gradient-to-tr from-slate-900 via-slate-800 to-purple-900 text-white shadow-md relative overflow-hidden">
                   <div className="flex items-center justify-between text-xs text-slate-300 font-mono">
                     <span className="text-[10px] tracking-wider uppercase">Tarjeta de Crédito</span>
-                    <span className="font-bold tracking-widest text-emerald-400">TEST SANDBOX</span>
+                    <span className={`font-bold tracking-widest ${isTestMode ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {isTestMode ? 'TEST SANDBOX' : 'PRODUCCIÓN REAL'}
+                    </span>
                   </div>
                   
                   <div className="my-2.5 font-mono text-sm tracking-widest font-bold">
@@ -880,7 +911,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   type="button"
                   onClick={handleExecutePayment}
                   disabled={isProcessingPayment}
-                  className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50"
+                  className={`w-full py-3 px-4 rounded-xl text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50 ${
+                    isTestMode
+                      ? 'bg-purple-600 hover:bg-purple-500'
+                      : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/20'
+                  }`}
                 >
                   {isProcessingPayment ? (
                     <>
@@ -890,7 +925,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   ) : (
                     <>
                       <Lock className="w-3.5 h-3.5" />
-                      <span>Confirmar Pago de Prueba (${finalPrice.toFixed(2)})</span>
+                      <span>{isTestMode ? `Confirmar Pago de Prueba ($${finalPrice.toFixed(2)})` : `Confirmar y Pagar ($${finalPrice.toFixed(2)})`}</span>
                     </>
                   )}
                 </button>

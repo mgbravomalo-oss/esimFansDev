@@ -315,6 +315,67 @@ export const UserEsimModel: Model<any> = mongoose.models.UserEsim || mongoose.mo
 export const AtlasOrderModel: Model<any> = mongoose.models.AtlasOrder || mongoose.model('AtlasOrder', flexibleSchema, 'orders');
 export const PurchaseAuditLogModel: Model<any> = mongoose.models.PurchaseAuditLog || mongoose.model('PurchaseAuditLog', flexibleSchema, 'purchase_audit_logs');
 export const CompatibleDeviceModel: Model<any> = mongoose.models.CompatibleDevice || mongoose.model('CompatibleDevice', flexibleSchema, 'compatible_devices');
+export const SystemSettingsModel: Model<any> = mongoose.models.SystemSettings || mongoose.model('SystemSettings', flexibleSchema, 'system_settings');
+
+const SYSTEM_SETTINGS_FILE = path.resolve(process.cwd(), '.system_settings.json');
+
+export async function getSystemSettingsFromDb(): Promise<{ isTestMode: boolean; requireAdminApproval: boolean }> {
+  let settings = { isTestMode: true, requireAdminApproval: true };
+
+  // 1. File persistence check
+  if (fs.existsSync(SYSTEM_SETTINGS_FILE)) {
+    try {
+      const raw = fs.readFileSync(SYSTEM_SETTINGS_FILE, 'utf-8');
+      settings = { ...settings, ...JSON.parse(raw) };
+    } catch {}
+  }
+
+  // 2. MongoDB persistence check
+  try {
+    if (mongoose.connection.readyState === 1) {
+      const doc = await SystemSettingsModel.findOne({ id: 'global_settings' }).lean();
+      if (doc) {
+        settings = {
+          isTestMode: doc.isTestMode !== false,
+          requireAdminApproval: doc.requireAdminApproval !== false,
+        };
+      }
+    }
+  } catch (err: any) {
+    console.warn('⚠️ [Settings] Error leyendo settings de MongoDB:', err?.message || err);
+  }
+
+  return settings;
+}
+
+export async function saveSystemSettingsToDb(updates: { isTestMode?: boolean; requireAdminApproval?: boolean }): Promise<{ isTestMode: boolean; requireAdminApproval: boolean }> {
+  const current = await getSystemSettingsFromDb();
+  const next = {
+    isTestMode: updates.isTestMode !== undefined ? updates.isTestMode : current.isTestMode,
+    requireAdminApproval: updates.requireAdminApproval !== undefined ? updates.requireAdminApproval : current.requireAdminApproval,
+  };
+
+  // 1. Save to file
+  try {
+    fs.writeFileSync(SYSTEM_SETTINGS_FILE, JSON.stringify(next, null, 2), 'utf-8');
+  } catch {}
+
+  // 2. Save to MongoDB
+  try {
+    if (mongoose.connection.readyState === 1) {
+      await SystemSettingsModel.findOneAndUpdate(
+        { id: 'global_settings' },
+        { $set: { id: 'global_settings', ...next, updatedAt: new Date() } },
+        { upsert: true, new: true }
+      );
+      console.log(`✅ [Settings] Ajustes persistidos en MongoDB: Modo Pruebas=${next.isTestMode}, Aprobación Manual=${next.requireAdminApproval}`);
+    }
+  } catch (err: any) {
+    console.warn('⚠️ [Settings] Error guardando settings en MongoDB:', err?.message || err);
+  }
+
+  return next;
+}
 
 export function getAtlasPlanModel() { return AtlasPlanModel; }
 

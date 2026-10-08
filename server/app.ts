@@ -42,6 +42,8 @@ import {
   createPurchaseAuditLog,
   appendPurchaseAuditStep,
   getRecentPurchaseAuditLogs,
+  getSystemSettingsFromDb,
+  saveSystemSettingsToDb,
 } from './db.js';
 import { sendEsimDeliveryEmail, sendTestEmail, sendOtpEmail, sendEsimAlertEmail, isEmailConfigured } from './mailer.js';
 import {
@@ -515,12 +517,17 @@ app.get('/api/db/status', async (_req: Request, res: Response) => {
   }
 
   const status = await getDatabaseStatus();
+  const currentSettings = await getSystemSettingsFromDb();
   const rawUri = (process.env.MONGODB_URI || process.env.MONGO_URI || '').trim();
   const uriPrefix = rawUri.length > 10 ? `${rawUri.substring(0, 14)}...` : (rawUri ? 'definida (corta)' : 'NO DEFINIDA');
 
   res.json({
     success: true,
     ...status,
+    settings: {
+      isTestMode: currentSettings.isTestMode,
+      requireAdminApproval: currentSettings.requireAdminApproval,
+    },
     diagnostics: {
       isVercel: Boolean(process.env.VERCEL),
       nodeEnv: process.env.NODE_ENV,
@@ -998,12 +1005,18 @@ app.get('/api/user/:userId/esims', requireAuth, async (req: AuthenticatedRequest
 });
 
 // ----------------------------------------------------
-// System Test Mode & Admin Approval Settings
+// System Test Mode & Admin Approval Settings (Persistent in MongoDB & Local fallback)
 // ----------------------------------------------------
-const systemSettings = {
-  isTestMode: true, // Default: True. All transactions are simulated and NEVER call wholesaler
-  requireAdminApproval: true, // Default: True. Orders require manual admin approval before generating eSIM
+let systemSettings = {
+  isTestMode: true, // Default: True
+  requireAdminApproval: true, // Default: True
 };
+
+// Bootstrap persistent settings from database asynchronously
+getSystemSettingsFromDb().then(persisted => {
+  systemSettings = { ...persisted };
+  console.log(`🔧 [Settings] Ajustes cargados desde base de datos: Modo Pruebas=${systemSettings.isTestMode}, Aprobación=${systemSettings.requireAdminApproval}`);
+}).catch(() => {});
 
 const SYSTEM_ADMIN_EMAILS = ['mgbravomalo@gmail.com', 'admin@wappa.io', 'admin@globalesim.net'];
 
@@ -1139,6 +1152,9 @@ app.get('/api/realtime/stream', (req: Request, res: Response) => {
 // GET /api/admin/settings - System settings & pending orders count
 app.get('/api/admin/settings', requireAdmin, async (req: Request, res: Response) => {
   try {
+    const dbSettings = await getSystemSettingsFromDb();
+    systemSettings = { ...dbSettings };
+
     const allOrders = await getOrdersFromDb({ isAdmin: true });
     const pendingOrdersCount = allOrders.filter(o => o.status === 'pending_approval').length;
     res.json({
@@ -1155,20 +1171,34 @@ app.get('/api/admin/settings', requireAdmin, async (req: Request, res: Response)
   }
 });
 
+// GET /api/system/settings - Public read-only system mode for checkout
+app.get('/api/system/settings', async (_req: Request, res: Response) => {
+  try {
+    const dbSettings = await getSystemSettingsFromDb();
+    res.json({
+      success: true,
+      isTestMode: dbSettings.isTestMode,
+      requireAdminApproval: dbSettings.requireAdminApproval,
+    });
+  } catch (err: any) {
+    res.json({
+      success: true,
+      isTestMode: systemSettings.isTestMode,
+      requireAdminApproval: systemSettings.requireAdminApproval,
+    });
+  }
+});
+
 // POST /api/admin/settings - Update system settings (Admin only)
 app.post('/api/admin/settings', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { isTestMode, requireAdminApproval } = req.body;
 
-    if (typeof isTestMode === 'boolean') {
-      systemSettings.isTestMode = isTestMode;
-      console.log(`🔧 [Settings] Modo de Pruebas cambiado a: ${isTestMode ? 'ACTIVO (Simulación Fake sin costo)' : 'PRODUCCIÓN (Mayorista Real)'}`);
-    }
+    const saved = await saveSystemSettingsToDb({ isTestMode, requireAdminApproval });
+    systemSettings = { ...saved };
 
-    if (typeof requireAdminApproval === 'boolean') {
-      systemSettings.requireAdminApproval = requireAdminApproval;
-      console.log(`🔧 [Settings] Aprobación manual requerida: ${requireAdminApproval}`);
-    }
+    console.log(`🔧 [Settings] Modo de Pruebas guardado: ${systemSettings.isTestMode ? 'ACTIVO (Simulación Fake sin costo)' : 'PRODUCCIÓN (Mayorista Real)'}`);
+    console.log(`🔧 [Settings] Aprobación manual requerida: ${systemSettings.requireAdminApproval}`);
 
     res.json({
       success: true,
@@ -1650,6 +1680,10 @@ app.post('/api/orders/create', requireAuth, async (req: AuthenticatedRequest, re
 
     const duration = Number(durationDays || (plan.isUnlimited ? 7 : (plan.validityDays || 30)));
     const pricePaid = Number((plan.isUnlimited ? plan.priceEUR * duration : plan.priceEUR).toFixed(2));
+    
+    // Always refresh latest system settings from persistent DB
+    const freshSettings = await getSystemSettingsFromDb();
+    systemSettings = { ...freshSettings };
     const isTestMode = systemSettings.isTestMode;
 
     const baseCost = typeof plan.costPriceEUR === 'number' && plan.costPriceEUR > 0
