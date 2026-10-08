@@ -22,7 +22,17 @@ export function isOriginAllowed(origin?: string): boolean {
     return true;
   }
   
-  const cleanOrigin = origin.trim().toLowerCase();
+  let cleanOrigin = origin.trim().toLowerCase();
+  
+  // Si es una URL completa (por ejemplo, procedente de Referer), extraer el protocolo y el host
+  try {
+    if (cleanOrigin.startsWith('http://') || cleanOrigin.startsWith('https://')) {
+      const parsed = new URL(cleanOrigin);
+      cleanOrigin = `${parsed.protocol}//${parsed.host}`;
+    }
+  } catch (e) {
+    // Si no es una URL válida, usar el string original limpio
+  }
   
   // Comprobar coincidencia exacta o subdominios permitidos (.run.app, .vercel.app, .azurewebsites.net, .esim.fans)
   return ALLOWED_ORIGINS.some(allowed => {
