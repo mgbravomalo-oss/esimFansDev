@@ -25,7 +25,7 @@ export interface EsimPlan {
   country: string;
   countryCode: string;
   flag: string;
-  region: 'local' | 'regional' | 'global';
+  region: 'local' | 'regional' | 'global' | 'europe' | 'asia' | 'americas' | 'middle_east' | 'africa' | 'oceania';
   regionName?: string;
   dataAmountGB: number;
   isUnlimited: boolean;
@@ -155,7 +155,7 @@ export interface Destination {
   name: string;
   code: string;
   flag: string;
-  region: 'europe' | 'asia' | 'americas' | 'global' | 'middle_east' | 'africa';
+  region: 'europe' | 'asia' | 'americas' | 'global' | 'middle_east' | 'africa' | 'oceania';
   regionLabel: string;
   startingPriceEUR: number;
   popular: boolean;

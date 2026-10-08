@@ -107,3 +107,15 @@ class D1Client {
 }
 
 export const d1Client = new D1Client();
+
+export function buildDestinationRowsFromPlans(rows: any[]) {
+  const map = new Map<string, any>();
+  for (const r of rows) {
+    if (!map.has(r.country_code)) {
+      map.set(r.country_code, { ...r, plansCount: 1 });
+    } else {
+      map.get(r.country_code).plansCount++;
+    }
+  }
+  return Array.from(map.values());
+}

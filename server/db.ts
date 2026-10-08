@@ -50,7 +50,7 @@ export function isD1Configured(): boolean {
 
 let isConnectingMongo = false;
 export async function connectToDatabase(): Promise<boolean> {
-  if (mongoose.connection.readyState === mongoose.ConnectionStates.connected) {
+  if ((mongoose.connection.readyState as number) === 1) {
     return true;
   }
   const uri = (process.env.MONGODB_URI || process.env.MONGO_URI || '').trim();
@@ -60,7 +60,7 @@ export async function connectToDatabase(): Promise<boolean> {
     while (isConnectingMongo && waitCount < 10) {
       await new Promise(r => setTimeout(r, 200));
       waitCount++;
-      if (mongoose.connection.readyState === mongoose.ConnectionStates.connected) return true;
+      if ((mongoose.connection.readyState as number) === 1) return true;
     }
   }
   isConnectingMongo = true;
