@@ -17,7 +17,6 @@ import {
 import { ButterflyLogo } from './ButterflyLogo';
 import { MainTab, User } from '../types';
 import { useTheme } from '../context/ThemeContext';
-import { PWAInstallButton } from './PWAInstallButton';
 
 interface NavbarProps {
   activeTab: MainTab;
@@ -31,7 +30,6 @@ interface NavbarProps {
   onOpenAdvisorModal: () => void;
   onOpenAdminOrdersModal?: () => void;
   pendingOrdersCount?: number;
-  onOpenFlutterDevGuide?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -45,8 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenGuideModal,
   onOpenAdvisorModal,
   onOpenAdminOrdersModal,
-  pendingOrdersCount = 0,
-  onOpenFlutterDevGuide
+  pendingOrdersCount = 0
 }) => {
   const { theme, toggleTheme, isDark } = useTheme();
 
@@ -151,18 +148,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Asistente IA</span>
               </button>
 
-
-              {isAdmin && onOpenFlutterDevGuide && (
-                <button
-                  onClick={onOpenFlutterDevGuide}
-                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/60 transition-colors flex items-center gap-1 shadow-2xs"
-                  title="Guía técnica de integración Flutter eSIM (esim_manager)"
-                >
-                  <Smartphone className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  <span>Flutter SDK</span>
-                </button>
-              )}
-
               {isAdmin && (
                 <button
                   onClick={() => setActiveTab('admin')}
@@ -187,9 +172,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right: Theme Toggle & User State / Authentication */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Botón de Instalación PWA */}
-            <PWAInstallButton variant="nav" />
-            
             {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
@@ -299,14 +281,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               Admin
-            </button>
-          )}
-          {isAdmin && onOpenFlutterDevGuide && (
-            <button
-              onClick={onOpenFlutterDevGuide}
-              className="text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1"
-            >
-              <span>Flutter</span>
             </button>
           )}
         </div>

@@ -75,27 +75,35 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
         </button>
       )}
 
-      {/* 3. Botón Flotante Muy Discreto (Default & Banner Replacement) */}
+      {/* 3. Botón Flotante Estilo Tarjeta con Lucesita */}
       {(variant === 'floating' || variant === 'banner') && (
-        <div className={`fixed bottom-5 left-4 z-40 animate-fade-in flex items-center ${className}`}>
-          <div className="group relative flex items-center gap-2 bg-slate-900/90 hover:bg-slate-900 dark:bg-slate-800/90 dark:hover:bg-slate-800 text-white backdrop-blur-md border border-slate-700/60 shadow-xl rounded-full pl-3.5 pr-2 py-1.5 transition-all duration-200 hover:shadow-emerald-950/20 hover:border-slate-600">
+        <div className={`fixed bottom-5 left-4 z-45 animate-fade-in flex items-center ${className}`}>
+          <div className="group relative flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white shadow-xl border border-slate-700/80 hover:border-emerald-500/60 transition-all duration-200">
             <button
               onClick={handleInstallClick}
               disabled={isInstalling}
-              className="flex items-center gap-2 text-xs font-medium cursor-pointer focus:outline-none"
+              className="flex items-center gap-2 text-xs font-bold cursor-pointer focus:outline-none text-white"
               title="Instalar aplicación en tu dispositivo"
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="font-semibold text-[11px] tracking-wide text-slate-200 group-hover:text-white">
+              {/* Icono con lucesita (LED) integrada */}
+              <div className="relative w-4 h-4 flex items-center justify-center shrink-0">
+                <Download className="w-4 h-4 text-emerald-400" />
+                {/* Lucesita (LED) pulsante */}
+                <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+              </div>
+
+              <div className="text-[11px] font-bold tracking-wide">
                 {isInstalling ? 'Instalando...' : 'Instalar App'}
-              </span>
+              </div>
             </button>
 
-            {/* Botón X miniatura para descartar si el usuario no desea verlo */}
+            {/* Botón X miniatura para descartar */}
             <button
               onClick={() => setDismissed(true)}
-              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700/60 transition-colors ml-1"
+              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-colors ml-1 cursor-pointer"
               aria-label="Cerrar botón"
               title="Ocultar"
             >

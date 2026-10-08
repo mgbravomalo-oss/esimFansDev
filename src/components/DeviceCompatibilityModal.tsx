@@ -28,7 +28,6 @@ interface DeviceCompatibilityModalProps {
   onClose: () => void;
   currentUser?: User | null;
   isAdmin?: boolean;
-  onOpenFlutterDevGuide?: () => void;
   onOpenPhoneDialer?: () => void;
 }
 
@@ -37,7 +36,6 @@ export const DeviceCompatibilityModal: React.FC<DeviceCompatibilityModalProps> =
   onClose,
   currentUser,
   isAdmin = false,
-  onOpenFlutterDevGuide,
   onOpenPhoneDialer
 }) => {
   const isUserAdmin = Boolean(
@@ -438,21 +436,6 @@ export const DeviceCompatibilityModal: React.FC<DeviceCompatibilityModalProps> =
                       {hardwareCheckResult.deviceModel ? ` • Modelo: ${hardwareCheckResult.deviceModel}` : ''}
                     </span>
                   </div>
-                </div>
-              )}
-
-              {isAdmin && onOpenFlutterDevGuide && (
-                <div className="pt-1 flex justify-end">
-                  <button
-                    onClick={() => {
-                      onClose();
-                      onOpenFlutterDevGuide();
-                    }}
-                    className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
-                  >
-                    <span>Ver código Dart de Flutter (esim_manager)</span>
-                    <span>→</span>
-                  </button>
                 </div>
               )}
             </div>

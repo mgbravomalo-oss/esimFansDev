@@ -16,7 +16,6 @@ import { InstallationGuideModal } from './components/InstallationGuideModal';
 import { AiTravelAdvisorModal } from './components/AiTravelAdvisorModal';
 import { AdminOrdersModal } from './components/AdminOrdersModal';
 import { AdminDashboardView } from './components/AdminDashboardView';
-import { FlutterEsimDevGuideModal } from './components/FlutterEsimDevGuideModal';
 import { AdminAiDiagnosticModal } from './components/AdminAiDiagnosticModal';
 import { InteractivePhoneDialerModal } from './components/InteractivePhoneDialerModal';
 import { ButterflyLogo } from './components/ButterflyLogo';
@@ -85,7 +84,6 @@ export default function App() {
   const [isAdvisorModalOpen, setIsAdvisorModalOpen] = useState(false);
   const [isAdminOrdersModalOpen, setIsAdminOrdersModalOpen] = useState(false);
   const [isAdminDiagnosticOpen, setIsAdminDiagnosticOpen] = useState(false);
-  const [isFlutterDevGuideOpen, setIsFlutterDevGuideOpen] = useState(false);
   const [pendingOrdersCount, setPendingOrdersCount] = useState<number>(0);
   const [catalogModalCloseKey, setCatalogModalCloseKey] = useState(0);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -619,7 +617,6 @@ export default function App() {
         onOpenAdvisorModal={() => setIsAdvisorModalOpen(true)}
         onOpenAdminOrdersModal={() => setIsAdminOrdersModalOpen(true)}
         pendingOrdersCount={pendingOrdersCount}
-        onOpenFlutterDevGuide={() => setIsFlutterDevGuideOpen(true)}
       />
 
       {/* Guest Notice Bar (if unauthenticated) */}
@@ -828,7 +825,6 @@ export default function App() {
           isOpen={isCompatibilityModalOpen}
           onClose={() => setIsCompatibilityModalOpen(false)}
           currentUser={user}
-          onOpenFlutterDevGuide={() => setIsFlutterDevGuideOpen(true)}
           onOpenPhoneDialer={() => setIsPhoneDialerOpen(true)}
         />
       )}
@@ -845,7 +841,6 @@ export default function App() {
         <InstallationGuideModal
           isOpen={isGuideModalOpen}
           onClose={() => setIsGuideModalOpen(false)}
-          onOpenFlutterDevGuide={() => setIsFlutterDevGuideOpen(true)}
         />
       )}
 
@@ -854,13 +849,6 @@ export default function App() {
           isOpen={isAdvisorModalOpen}
           onClose={() => setIsAdvisorModalOpen(false)}
           onSelectPlan={(plan) => setSelectedPlanForPurchase(plan)}
-        />
-      )}
-
-      {isFlutterDevGuideOpen && (
-        <FlutterEsimDevGuideModal
-          isOpen={isFlutterDevGuideOpen}
-          onClose={() => setIsFlutterDevGuideOpen(false)}
         />
       )}
 

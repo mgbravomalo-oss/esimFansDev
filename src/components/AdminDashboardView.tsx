@@ -39,6 +39,7 @@ import { Order, User, UserEsim } from '../types';
 import { CountryFlag } from './CountryFlag';
 import { realtimeSync } from '../utils/realtimeSync';
 import { clearCatalogCache } from '../utils/catalogCache';
+import { FlutterSdkView } from './FlutterSdkView';
 
 interface AdminDashboardViewProps {
   currentUser: User | null;
@@ -53,7 +54,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   pendingOrdersCount = 0,
   onOpenAiDiagnosticModal
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'status' | 'orders' | 'customers' | 'esims' | 'cron' | 'audit' | 'lookup' | 'logs'>('status');
+  const [activeSubTab, setActiveSubTab] = useState<'status' | 'orders' | 'customers' | 'esims' | 'cron' | 'audit' | 'lookup' | 'logs' | 'flutter'>('status');
 
   // Audit State
   const [auditData, setAuditData] = useState<any>(null);
@@ -1081,6 +1082,18 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
         >
           <FileText className="w-4 h-4 text-emerald-500" />
           <span>Logs de Compra &amp; Doble Check</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('flutter')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            activeSubTab === 'flutter'
+              ? 'bg-slate-900 dark:bg-emerald-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+          }`}
+        >
+          <Smartphone className="w-4 h-4 text-blue-500" />
+          <span>Flutter SDK</span>
         </button>
       </div>
 
@@ -3191,6 +3204,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             </div>
           )}
         </div>
+      )}
+
+      {activeSubTab === 'flutter' && (
+        <FlutterSdkView />
       )}
 
       {/* eSIM Inventory Detail Modal (Comprehensive info viewer) */}
