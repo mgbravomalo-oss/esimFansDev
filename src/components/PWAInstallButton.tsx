@@ -16,9 +16,17 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   const [isInstalling, setIsInstalling] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
+  const [isInFlutterWebView, setIsInFlutterWebView] = useState(false);
 
-  // Check for Flutter WebView (often indicated by 'Flutter' in User Agent)
-  const isInFlutterWebView = typeof navigator !== 'undefined' && navigator.userAgent.includes('Flutter');
+  React.useEffect(() => {
+    const isFlutterUA = typeof navigator !== 'undefined' && navigator.userAgent.includes('Flutter');
+    const hasParam = typeof window !== 'undefined' && 
+      (new URLSearchParams(window.location.search).get('is_webview') === 'true' || 
+       window.location.href.includes('is_webview=true'));
+    
+    setIsInFlutterWebView(isFlutterUA || hasParam);
+    console.log("PWAInstallButton: isInFlutterWebView =", isFlutterUA || hasParam);
+  }, []);
 
   React.useEffect(() => {
     const handleSearchState = (e: any) => {
