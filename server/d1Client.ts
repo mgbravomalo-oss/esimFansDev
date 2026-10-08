@@ -17,8 +17,18 @@ class D1Client {
     this.apiToken = (process.env.CLOUDFLARE_API_TOKEN || process.env.CLOUDFLARE_D1_TOKEN || '').trim();
   }
 
+  private quotaExceededUntil = 0;
+
   public isConfigured(): boolean {
     return Boolean(this.accountId && this.databaseId && this.apiToken);
+  }
+
+  public isQuotaExceeded(): boolean {
+    return Date.now() < this.quotaExceededUntil;
+  }
+
+  public markQuotaExceeded(hours: number = 6): void {
+    this.quotaExceededUntil = Date.now() + hours * 60 * 60 * 1000;
   }
 
   /**
@@ -31,11 +41,11 @@ class D1Client {
       );
     }
 
+    if (this.isQuotaExceeded()) {
+      throw new Error('D1_QUOTA_EXCEEDED: Límite diario de Cloudflare D1 alcanzado. Conmutando a MongoDB Atlas.');
+    }
+
     const url = `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/d1/database/${this.databaseId}/query`;
-    
-    console.log('🔍 [Cloudflare D1 Query] URL:', url);
-    console.log('🔍 [Cloudflare D1 Query] SQL:', sql);
-    console.log('🔍 [Cloudflare D1 Query] Token length:', this.apiToken.length);
 
     try {
       const response = await fetch(url, {
@@ -50,10 +60,13 @@ class D1Client {
         }),
       });
 
-      console.log('🔍 [Cloudflare D1 Query] Response status:', response.status);
-
       if (!response.ok) {
         const errText = await response.text();
+        if (errText.includes('7500') || errText.includes('exceeded D1') || errText.includes('daily row read limit')) {
+          this.markQuotaExceeded(6);
+          console.warn('⚠️ [Cloudflare D1] Límite diario gratuito de lecturas superado (Código 7500). Conmutando tráfico a MongoDB Atlas.');
+          throw new Error('D1_QUOTA_EXCEEDED: Límite diario de lecturas superado en Cloudflare D1.');
+        }
         console.error('❌ [Cloudflare D1 Query] Error body:', errText);
         throw new Error(`Error en Cloudflare D1 HTTP [${response.status}]: ${errText}`);
       }

@@ -202,6 +202,9 @@ export function setDualWriteEnabled(enabled: boolean): void {
 }
 
 export function getActiveDatabaseProvider(): DatabaseProvider {
+  if (activeDatabaseProvider === 'd1' && d1Client.isQuotaExceeded()) {
+    return 'mongo';
+  }
   return activeDatabaseProvider;
 }
 
