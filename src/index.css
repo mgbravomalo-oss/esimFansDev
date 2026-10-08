@@ -107,3 +107,7 @@
   animation: blink-yellow 1.8s ease-in-out infinite;
 }
 
+.min-h-dvh-screen {
+  min-height: 100dvh;
+}
+
