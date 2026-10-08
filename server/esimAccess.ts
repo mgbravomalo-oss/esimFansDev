@@ -349,7 +349,7 @@ export function resolveDeviceByEid(eid?: string): { brand?: string; model?: stri
   if (cleanEid === '89043051202200005223028851362634' || cleanEid.startsWith('890430512022')) {
     return {
       brand: 'Xiaomi',
-      model: 'Redmi Note 13 Pro',
+      model: 'Redmi 13 (2404ARN45L) / Redmi Note 13',
       type: 'Smartphone'
     };
   }

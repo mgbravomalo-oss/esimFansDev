@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import mongoose, { Schema, Model } from 'mongoose';
 import { d1Client } from './d1Client.js';
+import { resolveDeviceByEid } from './esimAccess.js';
 import { DESTINATIONS as FALLBACK_DESTINATIONS, ESIM_PLANS as FALLBACK_PLANS, DEMO_USERS as FALLBACK_USERS, DEMO_USER_ESIMS as FALLBACK_USER_ESIMS, COMPATIBLE_DEVICES as FALLBACK_COMPATIBLE_DEVICES } from '../src/data/esimData.js';
 import { Destination, EsimPlan, User, UserEsim, CompatibleDevice } from '../src/types';
 
@@ -41,7 +42,7 @@ export const SPANISH_COUNTRY_NAMES: Record<string, string> = {
 
 export function isDatabaseConnected(): boolean {
   // Only return true if MongoDB is actually connected
-  return mongoose.connection.readyState === mongoose.ConnectionStates.connected;
+  return (mongoose.connection.readyState as number) === 1;
 }
 
 export function isD1Configured(): boolean {
@@ -1023,42 +1024,45 @@ export async function fetchCustomerEsimsFromAtlas(userIdOrEmail?: string, _secon
       sql += ' ORDER BY created_at DESC';
       const rows = await d1Client.query(sql, params);
       if (rows && rows.length > 0) {
-        return rows.map((d: any) => ({
-          id: d.id,
-          iccid: d.iccid || '8988228000004928172',
-          planId: d.plan_id || 'plan-es-10gb',
-          planName: d.plan_name || 'España 10GB 30 Días',
-          country: d.country || 'España',
-          countryCode: d.country_code || 'ES',
-          flag: d.flag || getCountryFlag(d.country_code || 'ES'),
-          operator: d.operator || 'Movistar / Vodafone 5G',
-          network5G: Boolean(d.network_5g ?? 1),
-          qrCodeUrl: d.qr_code_url || 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=LPA:1$smdp.wappa-esim.net$ACT-ES-99281',
-          smdpAddress: d.smdp_address || 'smdp.wappa-esim.net',
-          activationCode: d.activation_code || 'LPA:1$smdp.wappa-esim.net$ACT-ES-99281',
-          manualCode: d.manual_code || 'ACT-ES-99281',
-          totalDataGB: d.total_data_gb || 10,
-          usedDataGB: d.used_data_gb || 0,
-          isUnlimited: Boolean(d.is_unlimited),
-          durationDays: d.duration_days || 30,
-          preInstallValidity: d.pre_install_validity || '180 Días',
-          unusedValidTimeDays: 180,
-          pricePaid: d.price_paid || 13.9,
-          salePriceEUR: d.sale_price_eur || d.price_paid || 13.9,
-          purchaseDate: d.purchase_date || '2026-09-28',
-          expiryDate: d.expiry_date || '2026-10-29',
-          status: d.status || 'active',
-          autoRenew: Boolean(d.auto_renew),
-          apn: d.apn || 'globaldata',
-          eid: d.eid || null,
-          deviceBrand: d.device_brand || d.deviceBrand || null,
-          deviceModel: d.device_model || d.deviceModel || null,
-          deviceType: d.device_type || d.deviceType || null,
-          installationTime: d.installation_time || d.installationTime || null,
-          activationTime: d.activation_time || d.activationTime || null,
-          expiredTime: d.expired_time || d.expiredTime || null,
-          providerStatus: d.provider_status || d.providerStatus || null,
-        }));
+        return rows.map((d: any) => {
+          const dev = resolveDeviceByEid(d.eid);
+          return {
+            id: d.id,
+            iccid: d.iccid || '8988228000004928172',
+            planId: d.plan_id || 'plan-es-10gb',
+            planName: d.plan_name || 'España 10GB 30 Días',
+            country: d.country || 'España',
+            countryCode: d.country_code || 'ES',
+            flag: d.flag || getCountryFlag(d.country_code || 'ES'),
+            operator: d.operator || 'Movistar / Vodafone 5G',
+            network5G: Boolean(d.network_5g ?? 1),
+            qrCodeUrl: d.qr_code_url || 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=LPA:1$smdp.wappa-esim.net$ACT-ES-99281',
+            smdpAddress: d.smdp_address || 'smdp.wappa-esim.net',
+            activationCode: d.activation_code || 'LPA:1$smdp.wappa-esim.net$ACT-ES-99281',
+            manualCode: d.manual_code || 'ACT-ES-99281',
+            totalDataGB: d.total_data_gb || 10,
+            usedDataGB: d.used_data_gb || 0,
+            isUnlimited: Boolean(d.is_unlimited),
+            durationDays: d.duration_days || 30,
+            preInstallValidity: d.pre_install_validity || '180 Días',
+            unusedValidTimeDays: 180,
+            pricePaid: d.price_paid || 13.9,
+            salePriceEUR: d.sale_price_eur || d.price_paid || 13.9,
+            purchaseDate: d.purchase_date || '2026-09-28',
+            expiryDate: d.expiry_date || '2026-10-29',
+            status: d.status || 'active',
+            autoRenew: Boolean(d.auto_renew),
+            apn: d.apn || 'globaldata',
+            eid: d.eid || null,
+            deviceBrand: d.device_brand || d.deviceBrand || dev.brand || null,
+            deviceModel: d.device_model || d.deviceModel || dev.model || null,
+            deviceType: d.device_type || d.deviceType || dev.type || null,
+            installationTime: d.installation_time || d.installationTime || null,
+            activationTime: d.activation_time || d.activationTime || null,
+            expiredTime: d.expired_time || d.expiredTime || null,
+            providerStatus: d.provider_status || d.providerStatus || null,
+          };
+        });
       }
     } catch (err: any) {
       console.warn('⚠️ Error consultando user_esims en D1:', err?.message || err);
@@ -1071,42 +1075,45 @@ export async function fetchCustomerEsimsFromAtlas(userIdOrEmail?: string, _secon
       const query = { $or: [{ userId: userIdOrEmail }, { userEmail: userIdOrEmail.toLowerCase() }] };
       const docs = await UserEsimModel.find(query).lean();
       if (docs && docs.length > 0) {
-        return docs.map((d: any) => ({
-          id: d.id || `esim-${Math.random().toString(36).slice(2, 7)}`,
-          iccid: d.iccid || '8988228000004928172',
-          planId: d.planId || 'plan-es-10gb',
-          planName: d.planName || 'España 10GB 30 Días',
-          country: d.country || 'España',
-          countryCode: d.countryCode || 'ES',
-          flag: d.flag || getCountryFlag(d.countryCode || 'ES'),
-          operator: d.operator || 'Movistar / Vodafone 5G',
-          network5G: true,
-          qrCodeUrl: d.qrCodeUrl || 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=LPA:1$smdp.wappa-esim.net$ACT-ES-99281',
-          smdpAddress: d.smdpAddress || 'smdp.wappa-esim.net',
-          activationCode: d.activationCode || 'LPA:1$smdp.wappa-esim.net$ACT-ES-99281',
-          manualCode: d.manualCode || 'ACT-ES-99281',
-          totalDataGB: d.totalDataGB || 10,
-          usedDataGB: d.usedDataGB || 0,
-          isUnlimited: Boolean(d.isUnlimited),
-          durationDays: d.durationDays || 30,
-          preInstallValidity: d.preInstallValidity || '180 Días',
-          unusedValidTimeDays: 180,
-          pricePaid: d.pricePaid || 13.9,
-          salePriceEUR: d.salePriceEUR || d.pricePaid || 13.9,
-          purchaseDate: d.purchaseDate || '2026-09-28',
-          expiryDate: d.expiryDate || '2026-10-29',
-          status: d.status || 'active',
-          autoRenew: Boolean(d.autoRenew),
-          apn: d.apn || 'globaldata',
-          eid: d.eid || null,
-          deviceBrand: d.deviceBrand || d.device_brand || null,
-          deviceModel: d.deviceModel || d.device_model || null,
-          deviceType: d.deviceType || d.device_type || null,
-          installationTime: d.installationTime || d.installation_time || null,
-          activationTime: d.activationTime || d.activation_time || null,
-          expiredTime: d.expiredTime || d.expired_time || null,
-          providerStatus: d.providerStatus || d.provider_status || null,
-        }));
+        return docs.map((d: any) => {
+          const dev = resolveDeviceByEid(d.eid);
+          return {
+            id: d.id || `esim-${Math.random().toString(36).slice(2, 7)}`,
+            iccid: d.iccid || '8988228000004928172',
+            planId: d.planId || 'plan-es-10gb',
+            planName: d.planName || 'España 10GB 30 Días',
+            country: d.country || 'España',
+            countryCode: d.countryCode || 'ES',
+            flag: d.flag || getCountryFlag(d.countryCode || 'ES'),
+            operator: d.operator || 'Movistar / Vodafone 5G',
+            network5G: true,
+            qrCodeUrl: d.qrCodeUrl || 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=LPA:1$smdp.wappa-esim.net$ACT-ES-99281',
+            smdpAddress: d.smdpAddress || 'smdp.wappa-esim.net',
+            activationCode: d.activationCode || 'LPA:1$smdp.wappa-esim.net$ACT-ES-99281',
+            manualCode: d.manualCode || 'ACT-ES-99281',
+            totalDataGB: d.totalDataGB || 10,
+            usedDataGB: d.usedDataGB || 0,
+            isUnlimited: Boolean(d.isUnlimited),
+            durationDays: d.durationDays || 30,
+            preInstallValidity: d.preInstallValidity || '180 Días',
+            unusedValidTimeDays: 180,
+            pricePaid: d.pricePaid || 13.9,
+            salePriceEUR: d.salePriceEUR || d.pricePaid || 13.9,
+            purchaseDate: d.purchaseDate || '2026-09-28',
+            expiryDate: d.expiryDate || '2026-10-29',
+            status: d.status || 'active',
+            autoRenew: Boolean(d.autoRenew),
+            apn: d.apn || 'globaldata',
+            eid: d.eid || null,
+            deviceBrand: d.deviceBrand || d.device_brand || dev.brand || null,
+            deviceModel: d.deviceModel || d.device_model || dev.model || null,
+            deviceType: d.deviceType || d.device_type || dev.type || null,
+            installationTime: d.installationTime || d.installation_time || null,
+            activationTime: d.activationTime || d.activation_time || null,
+            expiredTime: d.expiredTime || d.expired_time || null,
+            providerStatus: d.providerStatus || d.provider_status || null,
+          };
+        });
       }
     }
   } catch (err) {

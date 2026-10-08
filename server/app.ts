@@ -1694,12 +1694,55 @@ app.post('/api/orders/create', requireAuth, async (req: AuthenticatedRequest, re
     const orderNumber = `WPA-${Math.floor(100000 + Math.random() * 900000)}`;
     const orderId = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
+    // Client-side device detection (Client Hints & User-Agent)
+    const userAgent = (req.headers['user-agent'] as string) || '';
+    const chModel = ((req.headers['sec-ch-ua-model'] as string) || '').replace(/"/g, '').trim();
+    const chPlatform = ((req.headers['sec-ch-ua-platform'] as string) || '').replace(/"/g, '').trim();
+
+    let detectedDeviceBrand = 'Desconocido';
+    let detectedDeviceModel = 'Dispositivo Web / Móvil';
+    if (chModel) {
+      detectedDeviceModel = chModel;
+      if (/redmi|xiaomi|2404ARN45L/i.test(chModel)) detectedDeviceBrand = 'Xiaomi';
+      else if (/samsung|sm-/i.test(chModel)) detectedDeviceBrand = 'Samsung';
+      else if (/pixel/i.test(chModel)) detectedDeviceBrand = 'Google';
+      else if (/iphone/i.test(chModel)) detectedDeviceBrand = 'Apple';
+    } else if (userAgent) {
+      if (/iPhone/i.test(userAgent)) {
+        detectedDeviceBrand = 'Apple';
+        detectedDeviceModel = 'iPhone';
+      } else if (/iPad/i.test(userAgent)) {
+        detectedDeviceBrand = 'Apple';
+        detectedDeviceModel = 'iPad';
+      } else if (/2404ARN45L|Redmi 13/i.test(userAgent)) {
+        detectedDeviceBrand = 'Xiaomi';
+        detectedDeviceModel = 'Redmi 13 (2404ARN45L)';
+      } else if (/Redmi Note 13/i.test(userAgent)) {
+        detectedDeviceBrand = 'Xiaomi';
+        detectedDeviceModel = 'Redmi Note 13';
+      } else if (/Xiaomi|Redmi/i.test(userAgent)) {
+        detectedDeviceBrand = 'Xiaomi';
+        detectedDeviceModel = 'Xiaomi Device';
+      } else if (/Pixel \d/i.test(userAgent)) {
+        detectedDeviceBrand = 'Google';
+        const match = userAgent.match(/Pixel \d[a-zA-Z\s]*/i);
+        detectedDeviceModel = match ? match[0] : 'Google Pixel';
+      } else if (/SM-[A-Z0-9]+/i.test(userAgent)) {
+        detectedDeviceBrand = 'Samsung';
+        const match = userAgent.match(/SM-[A-Z0-9]+/i);
+        detectedDeviceModel = match ? match[0] : 'Samsung Galaxy';
+      }
+    }
+
     const orderData: any = {
       id: orderId,
       orderNumber,
       userId: user.id || `usr_${Date.now()}`,
       userEmail: user.email.toLowerCase().trim(),
       userName: user.name || user.email.split('@')[0],
+      deviceBrand: detectedDeviceBrand,
+      deviceModel: detectedDeviceModel,
+      devicePlatform: chPlatform || (userAgent.includes('Android') ? 'Android' : userAgent.includes('iPhone') ? 'iOS' : 'Web'),
       planId: plan.id,
       planName: plan.isUnlimited ? `${plan.name} (${duration} Días)` : plan.name,
       country: plan.country,
@@ -1765,6 +1808,8 @@ app.post('/api/orders/create', requireAuth, async (req: AuthenticatedRequest, re
         profitEUR: Number((pricePaid - costPriceEUR).toFixed(2)),
         status: 'ready_to_install',
         autoRenew: false,
+        deviceBrand: detectedDeviceBrand,
+        deviceModel: detectedDeviceModel,
         apn: provision.apn || plan.apn || 'globaldata',
         fupPolicy: plan.fupPolicy,
         fupDailyAllowance: plan.fupDailyAllowance,
