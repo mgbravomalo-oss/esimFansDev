@@ -60,9 +60,6 @@ const GoogleIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' })
   </svg>
 );
 
-// Global tracking variable for GSI initialization
-let gsiInitialized = false;
-
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
@@ -90,14 +87,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Inicializar Google Identity Services cuando el modal se abre
   useEffect(() => {
-    if (!isOpen || authMode !== 'options' || gsiInitialized) return;
+    if (!isOpen || authMode !== 'options') return;
 
     let timeoutId: NodeJS.Timeout;
 
     const initGsi = () => {
-      if (gsiInitialized) return;
-      gsiInitialized = true;
-
       if (typeof window !== 'undefined' && window.google?.accounts?.id && googleClientId) {
         try {
           window.google.accounts.id.initialize({
@@ -111,14 +105,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             cancel_on_tap_outside: true,
           });
         } catch (err: any) {
-          gsiInitialized = false; // Reset on error
           console.warn('Error al inicializar Google Identity Services ID:', err);
         }
       } else if (typeof window !== 'undefined' && !window.google?.accounts) {
-        gsiInitialized = false; // Reset to allow retry
         timeoutId = setTimeout(initGsi, 300);
-      } else {
-        gsiInitialized = false; // Reset if conditions not met
       }
     };
 
