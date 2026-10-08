@@ -79,6 +79,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
   const [googleAuthError, setGoogleAuthError] = useState<string | null>(null);
   const { isDark } = useTheme();
+  const initializedRef = useRef(false);
 
   const googleClientId = (
     import.meta.env.VITE_GOOGLE_CLIENT_ID ||
@@ -87,7 +88,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Inicializar Google Identity Services cuando el modal se abre
   useEffect(() => {
-    if (!isOpen || authMode !== 'options') return;
+    if (!isOpen || authMode !== 'options' || initializedRef.current) return;
 
     let timeoutId: NodeJS.Timeout;
 
@@ -104,6 +105,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             auto_select: false,
             cancel_on_tap_outside: true,
           });
+          initializedRef.current = true;
         } catch (err: any) {
           console.warn('Error al inicializar Google Identity Services ID:', err);
         }
