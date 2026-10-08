@@ -15,7 +15,7 @@ async function startServer() {
   const distPath = path.join(process.cwd(), 'dist');
   const hasDist = fs.existsSync(distPath) && fs.existsSync(path.join(distPath, 'index.html'));
 
-  if (process.env.NODE_ENV === 'production' && hasDist) {
+  if ((process.env.NODE_ENV === 'production' || hasDist) && hasDist) {
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
@@ -25,6 +25,7 @@ async function startServer() {
       server: {
         middlewareMode: true,
         hmr: false,
+        allowedHosts: true,
       },
       appType: 'spa',
     });
