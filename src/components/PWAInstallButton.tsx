@@ -14,7 +14,10 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSModal, setShowIOSModal] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    // Persistent dismissal check
+    return typeof window !== 'undefined' && localStorage.getItem('pwa-dismissed') === 'true';
+  });
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
   const [isInFlutterWebView, setIsInFlutterWebView] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -24,6 +27,13 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     console.log("PWAInstallButton: Synchronous Detection =", isFlutterUA || hasParam);
     return isFlutterUA || hasParam;
   });
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pwa-dismissed', 'true');
+    }
+  };
 
   React.useEffect(() => {
     const handleSearchState = (e: any) => {
@@ -110,7 +120,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
 
             {/* Botón X miniatura para descartar */}
             <button
-              onClick={() => setDismissed(true)}
+              onClick={handleDismiss}
               className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-colors ml-1 cursor-pointer"
               aria-label="Cerrar botón"
               title="Ocultar"
@@ -185,6 +195,19 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                 <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
                 <span>La app se abrirá en una ventana dedicada para un acceso más rápido.</span>
               </div>
+            </div>
+
+            <div className="pt-2">
+              <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer hover:text-slate-900 dark:hover:text-slate-200">
+                <input
+                  type="checkbox"
+                  onChange={(e) => {
+                    if (e.target.checked) handleDismiss();
+                  }}
+                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                No volver a preguntar
+              </label>
             </div>
 
             <button
