@@ -673,7 +673,7 @@ app.get('/api/admin/infrastructure', async (req: Request, res: Response) => {
       badgeColor = 'violet';
       details = {
         platform: 'Vercel Global Edge Network',
-        domain: process.env.VERCEL_URL || forwardedHost,
+        domain: process.env.VERCEL_URL || 'mariodev-2fif.vercel.app',
         environment: process.env.VERCEL_ENV || 'production',
       };
     } else {

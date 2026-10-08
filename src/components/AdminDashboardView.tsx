@@ -3636,7 +3636,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 
                   {/* Vercel Card */}
                   <a
-                    href="https://esimfans.vercel.app"
+                    href="https://mariodev-2fif.vercel.app"
                     target="_blank"
                     rel="noreferrer"
                     className={`p-3 rounded-xl border flex items-center justify-between transition-all group ${
@@ -3654,7 +3654,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                             <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-violet-600 text-white uppercase">Estás aquí</span>
                           )}
                         </div>
-                        <span className="text-[11px] text-slate-400 font-mono block">esimfans.vercel.app</span>
+                        <span className="text-[11px] text-slate-400 font-mono block">mariodev-2fif.vercel.app</span>
                       </div>
                     </div>
                     <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-violet-500 transition-colors" />
