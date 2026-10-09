@@ -38,6 +38,7 @@ export const SPANISH_COUNTRY_NAMES: Record<string, string> = {
   CM: 'Camerún', MU: 'Mauricio', SC: 'Seychelles', ET: 'Etiopía', JO: 'Jordania',
   LB: 'Líbano', OM: 'Omán', BH: 'Baréin', IQ: 'Irak', FJ: 'Fiyi', PF: 'Polinesia Francesa',
   'EU-33': 'Europa (33 Países)', 'GL-139': 'Global (139 Países)',
+  'OCE-8': 'Oceanía (8 Países)', 'AUNZ-2': 'Australia y Nueva Zelanda',
 };
 
 export function isDatabaseConnected(): boolean {
@@ -88,7 +89,7 @@ function resolveRegion(code: string): 'europe' | 'americas' | 'asia' | 'middle_e
   if (c.startsWith('AS') || c.startsWith('SEA') || c.startsWith('SAS') || ['JP', 'KR', 'CN', 'TH', 'VN', 'SG', 'MY', 'ID', 'PH', 'IN', 'TW', 'HK', 'MO', 'LK', 'NP', 'KH', 'LA', 'MM', 'BD', 'PK', 'MN', 'KZ', 'UZ', 'KG', 'TJ', 'TM'].includes(c)) return 'asia';
   if (c.startsWith('ME-') || c.startsWith('ME_') || ['TR', 'AE', 'SA', 'IL', 'QA', 'KW', 'OM', 'JO', 'BH', 'LB', 'IQ', 'YE', 'IR', 'PS', 'SY'].includes(c)) return 'middle_east';
   if (c.startsWith('AF') || ['EG', 'MA', 'ZA', 'KE', 'TZ', 'NG', 'GH', 'SN', 'CI', 'MU', 'UG', 'RW', 'ET', 'DZ', 'TN', 'CM', 'MZ', 'AO', 'ZW', 'ZM', 'NA', 'BW', 'MG', 'LS', 'SZ', 'SS', 'TG', 'BJ', 'BF', 'NE', 'ML', 'GN', 'SL', 'LR', 'CV', 'SC', 'RE'].includes(c)) return 'africa';
-  if (c.startsWith('OCE') || ['AU', 'NZ', 'FJ', 'PG', 'NC', 'PF', 'GU', 'WS', 'TO', 'VU'].includes(c)) return 'oceania';
+  if (c.startsWith('OCE') || c.startsWith('AUNZ') || ['AU', 'NZ', 'FJ', 'PG', 'NC', 'PF', 'GU', 'WS', 'TO', 'VU'].includes(c)) return 'oceania';
   return 'global';
 }
 

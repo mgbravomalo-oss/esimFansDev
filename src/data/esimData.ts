@@ -109,6 +109,17 @@ export const GLOBAL_140_COUNTRIES: DestinationCountryCoverage[] = [
   { code: 'MA', name: 'Marruecos', flag: '🇲🇦', operators: ['Maroc Telecom', 'Orange'] },
 ];
 
+export const OCEANIA_8_COUNTRIES: DestinationCountryCoverage[] = [
+  { code: 'AU', name: 'Australia', flag: '🇦🇺', operators: ['Telstra', 'Optus', 'Vodafone'] },
+  { code: 'NZ', name: 'Nueva Zelanda', flag: '🇳🇿', operators: ['Spark', 'One NZ', '2degrees'] },
+  { code: 'FJ', name: 'Fiyi', flag: '🇫🇯', operators: ['Vodafone', 'Digicel'] },
+  { code: 'PG', name: 'Papúa Nueva Guinea', flag: '🇵🇬', operators: ['Digicel', 'bmobile'] },
+  { code: 'WS', name: 'Samoa', flag: '🇼🇸', operators: ['Digicel', 'Vodafone'] },
+  { code: 'TO', name: 'Tonga', flag: '🇹🇴', operators: ['Digicel', 'TCC'] },
+  { code: 'VU', name: 'Vanuatu', flag: '🇻🇺', operators: ['Vodafone', 'Digicel'] },
+  { code: 'GU', name: 'Guam', flag: '🇬🇺', operators: ['Docomo Pacific', 'GTA Teleguam', 'IT&E'] },
+];
+
 export function resolveDestinationCoveredCountries(dest?: Destination | null): DestinationCountryCoverage[] {
   if (!dest) return [];
   if (Array.isArray(dest.coveredCountries) && dest.coveredCountries.length > 0) {
@@ -117,6 +128,9 @@ export function resolveDestinationCoveredCountries(dest?: Destination | null): D
   const code = (dest.code || '').toUpperCase().trim();
   const name = (dest.name || '').toLowerCase();
 
+  if (code.startsWith('OCE') || code.startsWith('AUNZ') || name.includes('oceania') || name.includes('oceanía')) {
+    return OCEANIA_8_COUNTRIES;
+  }
   if (code.startsWith('EU') || code === 'EUR' || name.includes('europa') || name.includes('europe')) {
     return EUROPE_35_COUNTRIES;
   }

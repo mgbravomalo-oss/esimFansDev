@@ -611,7 +611,22 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
       if (selectedRegion !== 'all' && selectedRegion !== 'popular') {
         const destReg = (dest.region || '').replace('-', '_');
         const selReg = selectedRegion.replace('-', '_');
-        if (destReg !== selReg) return false;
+
+        if (selectedRegion === 'global') {
+          // Paquetes globales y multipaís (incluye Oceanía 8 áreas, Global 139, Europa 33, etc.)
+          if (destReg !== 'global' && !dest.isMultiCountry) return false;
+        } else if (selectedRegion === 'oceania') {
+          const isOceania =
+            destReg === 'oceania' ||
+            dest.code.startsWith('OCE') ||
+            dest.code.startsWith('AUNZ') ||
+            ['AU', 'NZ', 'FJ', 'PG', 'NC', 'PF', 'GU', 'WS', 'TO', 'VU'].includes(dest.code.toUpperCase()) ||
+            /ocean[ií]a/i.test(dest.name) ||
+            /australia/i.test(dest.name);
+          if (!isOceania) return false;
+        } else if (destReg !== selReg) {
+          return false;
+        }
       }
 
       return true;
@@ -1056,6 +1071,18 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
             }`}
           >
             🌍 África
+          </button>
+          <button
+            onClick={() => handleSelectRegion('oceania')}
+            onMouseEnter={() => handleRegionHover('oceania')}
+            onTouchStart={() => handleRegionHover('oceania')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+              selectedRegion === 'oceania'
+                ? 'bg-slate-900 dark:bg-emerald-600 text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            🦘 Oceanía
           </button>
           <button
             onClick={() => handleSelectRegion('global')}
