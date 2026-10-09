@@ -109,5 +109,6 @@
 
 .min-h-dvh-screen {
   min-height: 100dvh;
+  will-change: min-height;
 }
 

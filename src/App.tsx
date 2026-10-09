@@ -593,7 +593,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-dvh-screen bg-slate-100/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
+    <div className="min-h-dvh-screen bg-slate-100/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans">
       
       {/* Navbar */}
       <Navbar
