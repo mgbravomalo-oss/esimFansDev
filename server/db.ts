@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import mongoose, { Schema, Model } from 'mongoose';
 import { d1Client } from './d1Client.js';
 import { resolveDeviceByEid } from './esimAccess.js';
@@ -121,7 +122,9 @@ export function parseProviderValue(val?: any): DatabaseProvider | null {
 }
 
 const DB_PROVIDER_STATE_FILE = path.resolve(process.cwd(), '.active_db_provider');
+const TMP_DB_PROVIDER_STATE_FILE = path.join(os.tmpdir(), '.active_db_provider');
 const DUAL_WRITE_STATE_FILE = path.resolve(process.cwd(), '.dual_write_enabled');
+const TMP_DUAL_WRITE_STATE_FILE = path.join(os.tmpdir(), '.dual_write_enabled');
 const DB_CONFIG_JSON_FILE = path.resolve(process.cwd(), 'database_config.json');
 
 function updateJsonConfig(updates: Partial<{ activeProvider: DatabaseProvider; dualWriteEnabled: boolean }>): void {
@@ -138,7 +141,32 @@ function updateJsonConfig(updates: Partial<{ activeProvider: DatabaseProvider; d
 }
 
 function loadPersistedProvider(): DatabaseProvider {
-  // 1. ENVIRONMENT VARIABLES ALWAYS TAKE SUPREME PRECEDENCE (Vercel / Cloud Run / Production)
+  // 1. Check temporary runtime file first (for hot-switched serverless lambda instances)
+  try {
+    if (fs.existsSync(TMP_DB_PROVIDER_STATE_FILE)) {
+      const tmpVal = parseProviderValue(fs.readFileSync(TMP_DB_PROVIDER_STATE_FILE, 'utf-8'));
+      if (tmpVal) return tmpVal;
+    }
+  } catch {}
+
+  // 2. Check authoritative state file on disk (.active_db_provider)
+  try {
+    if (fs.existsSync(DB_PROVIDER_STATE_FILE)) {
+      const fileVal = parseProviderValue(fs.readFileSync(DB_PROVIDER_STATE_FILE, 'utf-8'));
+      if (fileVal) return fileVal;
+    }
+  } catch {}
+
+  // 3. Check JSON configuration file (database_config.json)
+  try {
+    if (fs.existsSync(DB_CONFIG_JSON_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(DB_CONFIG_JSON_FILE, 'utf-8'));
+      const parsedVal = parseProviderValue(parsed?.activeProvider);
+      if (parsedVal) return parsedVal;
+    }
+  } catch {}
+
+  // 4. Check environment variables as fallback
   const envVal = parseProviderValue(
     process.env.ACTIVE_DB_PROVIDER ||
     process.env.DATABASE_PROVIDER ||
@@ -148,32 +176,22 @@ function loadPersistedProvider(): DatabaseProvider {
     return envVal;
   }
 
-  // 2. Persisted files on disk (for local development persistence)
-  try {
-    if (fs.existsSync(DB_PROVIDER_STATE_FILE)) {
-      const fileVal = parseProviderValue(fs.readFileSync(DB_PROVIDER_STATE_FILE, 'utf-8'));
-      if (fileVal) return fileVal;
-    }
-    if (fs.existsSync(DB_CONFIG_JSON_FILE)) {
-      const parsed = JSON.parse(fs.readFileSync(DB_CONFIG_JSON_FILE, 'utf-8'));
-      const parsedVal = parseProviderValue(parsed?.activeProvider);
-      if (parsedVal) return parsedVal;
-    }
-  } catch {
-    // Ignore read errors
-  }
-
-  // 3. Absolute default is always 'mongo' (MongoDB Atlas)
+  // 5. Default is always 'mongo' (MongoDB Atlas)
   return 'mongo';
 }
 
 function savePersistedProvider(provider: DatabaseProvider): void {
+  // Save to project root file (.active_db_provider)
   try {
     fs.writeFileSync(DB_PROVIDER_STATE_FILE, provider, 'utf-8');
-    updateJsonConfig({ activeProvider: provider });
   } catch (err) {
-    console.warn('Could not persist database provider to disk:', err);
+    // Project root may be read-only in serverless/Vercel
   }
+  // Save to /tmp for serverless runtime continuity
+  try {
+    fs.writeFileSync(TMP_DB_PROVIDER_STATE_FILE, provider, 'utf-8');
+  } catch {}
+  updateJsonConfig({ activeProvider: provider });
 }
 
 let activeDatabaseProvider: DatabaseProvider = loadPersistedProvider();
@@ -202,10 +220,11 @@ function loadPersistedDualWrite(): boolean {
 function savePersistedDualWrite(enabled: boolean): void {
   try {
     fs.writeFileSync(DUAL_WRITE_STATE_FILE, enabled ? 'true' : 'false', 'utf-8');
-    updateJsonConfig({ dualWriteEnabled: enabled });
-  } catch (err) {
-    console.warn('Could not persist dual write setting to disk:', err);
-  }
+  } catch (err) {}
+  try {
+    fs.writeFileSync(TMP_DUAL_WRITE_STATE_FILE, enabled ? 'true' : 'false', 'utf-8');
+  } catch (err) {}
+  updateJsonConfig({ dualWriteEnabled: enabled });
 }
 
 let dualWriteEnabled: boolean = loadPersistedDualWrite();
@@ -221,13 +240,7 @@ export function setDualWriteEnabled(enabled: boolean): void {
 }
 
 export function getActiveDatabaseProvider(): DatabaseProvider {
-  // Check runtime environment variable first (Vercel / Cloud Run overrides)
-  const envProvider = parseProviderValue(
-    process.env.ACTIVE_DB_PROVIDER ||
-    process.env.DATABASE_PROVIDER ||
-    process.env.DB_PROVIDER
-  );
-  const current = envProvider || activeDatabaseProvider || 'mongo';
+  const current = activeDatabaseProvider || 'mongo';
 
   if (current === 'd1' && d1Client.isQuotaExceeded()) {
     return 'mongo';
@@ -240,8 +253,11 @@ export function setActiveDatabaseProvider(provider: DatabaseProvider): void {
   if (parsed) {
     activeDatabaseProvider = parsed;
     savePersistedProvider(parsed);
+    // Sync process.env so that any in-memory reads stay consistent
+    process.env.ACTIVE_DB_PROVIDER = parsed;
+    process.env.DATABASE_PROVIDER = parsed;
     invalidateServerCatalogCache();
-    console.log(`🔄 [Database Switch] Proveedor de base de datos cambiado a: ${parsed.toUpperCase()} (Guardado persistentemente)`);
+    console.log(`🔄 [Database Switch] Proveedor cambiado en caliente a: ${parsed.toUpperCase()} (Guardado en .active_db_provider)`);
   }
 }
 
