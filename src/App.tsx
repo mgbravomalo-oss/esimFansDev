@@ -658,7 +658,7 @@ export default function App() {
             esims={userEsims}
             isLoading={isLoadingUserEsims}
             onRefresh={() => {
-              if (user) fetchUserEsims(user, userEsims.length > 0);
+              if (user) fetchUserEsims(user, true);
               fetchPendingOrdersCount();
             }}
             onNavigateToStore={() => setActiveTab('store')}

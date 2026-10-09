@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Smartphone,
   QrCode,
@@ -21,7 +21,6 @@ import {
   Globe,
   Sparkles,
   Calendar,
-  RefreshCw,
   Bell,
   BellRing,
   BellOff,
@@ -96,6 +95,11 @@ export const MyEsimsView: React.FC<MyEsimsViewProps> = ({
 
   const [isNotificationStatusModalOpen, setIsNotificationStatusModalOpen] = useState(false);
   const [notificationDismissedOrMuted, setNotificationDismissedOrMuted] = useState(false);
+
+  const onRefreshRef = useRef(onRefresh);
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
 
   useEffect(() => {
     if (onScreenTestAlert) {
@@ -186,17 +190,17 @@ export const MyEsimsView: React.FC<MyEsimsViewProps> = ({
   useEffect(() => {
     fetchPendingOrders();
 
-    // Solo consultar periódicamente si hay órdenes pendientes activas esperando aprobación
-    let interval: any = null;
-    if (userPendingOrders.length > 0) {
-      interval = setInterval(() => {
+    // Actualización continua en vivo cada 5 segundos del saldo, órdenes y estado con el operador
+    const interval = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
         fetchPendingOrders();
-      }, 5000);
-    }
+        onRefreshRef.current?.();
+      }
+    }, 5000);
 
     const handleRefresh = () => {
       fetchPendingOrders();
-      onRefresh?.();
+      onRefreshRef.current?.();
     };
 
     window.addEventListener('app:order_approved_refresh', handleRefresh);
@@ -205,13 +209,13 @@ export const MyEsimsView: React.FC<MyEsimsViewProps> = ({
     window.addEventListener('focus', handleRefresh);
 
     return () => {
-      if (interval) clearInterval(interval);
+      clearInterval(interval);
       window.removeEventListener('app:order_approved_refresh', handleRefresh);
       window.removeEventListener('app:order_approved', handleRefresh);
       window.removeEventListener('app:order_deleted', handleRefresh);
       window.removeEventListener('focus', handleRefresh);
     };
-  }, [user?.email, esims.length, pendingOrdersCount, userPendingOrders.length]);
+  }, [user?.email]);
 
   const handleEnableWebPush = async () => {
     setIsRequestingWebPush(true);
@@ -474,17 +478,14 @@ export const MyEsimsView: React.FC<MyEsimsViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 self-start md:self-auto flex-wrap w-full md:w-auto justify-center md:justify-end">
-          {onRefresh && (
-            <button
-              onClick={onRefresh}
-              disabled={isLoading}
-              className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 text-xs font-bold border border-emerald-200 dark:border-emerald-800/60 shadow-2xs transition-all active:scale-95 disabled:opacity-60"
-              title="Preguntar al operador mayorista el saldo de datos y tiempo exacto en vivo"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>{isLoading ? 'Consultando Proveedor...' : 'Actualizar Saldo en Vivo'}</span>
-            </button>
-          )}
+          {/* Indicador de sincronización continua en vivo cada pocos segundos */}
+          <div
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-xs font-semibold border border-emerald-200 dark:border-emerald-800/60 shadow-2xs"
+            title="Tu saldo y estado se actualizan de forma continua y automática en vivo con el operador"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+            <span>En vivo</span>
+          </div>
 
           {isAdmin && onOpenAdminOrdersModal && (
             <button
