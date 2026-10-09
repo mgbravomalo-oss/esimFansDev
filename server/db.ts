@@ -755,11 +755,12 @@ async function queryMongoPlans(rawCode: string, search: string, filter: any): Pr
           if (doc.dataDisplay && doc.dataDisplay.includes('GB')) {
             dataAmountGB = parseFloat(doc.dataDisplay) || 5;
           } else if (doc.dataDisplay && doc.dataDisplay.includes('MB')) {
-            dataAmountGB = Number((parseFloat(doc.dataDisplay) / 1024).toFixed(2)) || 1;
+            dataAmountGB = Math.round((parseFloat(doc.dataDisplay) / 1024) * 100) / 100 || 0.1;
           } else if (doc.dataAmount) {
-            dataAmountGB = Number((doc.dataAmount / (1024 * 1024 * 1024)).toFixed(1)) || 5;
+            dataAmountGB = Math.round((doc.dataAmount / (1024 * 1024 * 1024)) * 100) / 100 || 5;
           }
         }
+        dataAmountGB = isUnlimited ? 999 : (Math.round(dataAmountGB * 100) / 100);
 
         const priceEUR = Number((doc.retailPrice || doc.price || 5.0).toFixed(2));
         const isMulti = locCode.length > 2 || locCode.startsWith('EU') || locCode.startsWith('GL') || locCode.startsWith('NA');
@@ -787,7 +788,7 @@ async function queryMongoPlans(rawCode: string, search: string, filter: any): Pr
           fupDailyAllowance: isUnlimited ? (doc.dataDisplay || '1 GB/Día') : undefined,
           fupPolicy: isUnlimited ? (doc.fupPolicy || '512 Kbps') : undefined,
           fupSpeedThrottling: isUnlimited ? (doc.fupPolicy || '512 Kbps') : undefined,
-          fupResetInterval: isUnlimited ? 'Cada 24 horas (00:00 UTC)' : undefined,
+          fupResetInterval: isUnlimited ? 'Cada jornada (24h)' : undefined,
         };
       });
 
@@ -845,6 +846,12 @@ async function queryD1Plans(rawCode: string, search: string, filter: any): Promi
           operatorStr = getCountryTopOperators(r.country_code || rawCode).join(' / ');
         }
 
+        const rawDataGb = typeof r.data_gb === 'number' ? r.data_gb : parseFloat(r.data_gb);
+        let parsedDataGb = 5;
+        if (!isNaN(rawDataGb) && rawDataGb > 0) {
+          parsedDataGb = Math.round(rawDataGb * 100) / 100;
+        }
+
         return {
           id: r.id || r.plan_id,
           planId: r.id || r.plan_id,
@@ -853,7 +860,7 @@ async function queryD1Plans(rawCode: string, search: string, filter: any): Promi
           countryCode: r.country_code?.toUpperCase() || rawCode,
           flag: getCountryFlag(r.country_code),
           region: resolveRegion(r.country_code || rawCode),
-          dataAmountGB: isUnlimited ? 999 : (r.data_gb || 5),
+          dataAmountGB: isUnlimited ? 999 : parsedDataGb,
           isUnlimited,
           validityDays: r.duration_days || 30,
           priceEUR: Number((r.price_eur || 5.0).toFixed(2)),
@@ -868,7 +875,7 @@ async function queryD1Plans(rawCode: string, search: string, filter: any): Promi
           fupDailyAllowance: isUnlimited ? (r.name.includes('GB') ? r.name.match(/[\d.]+\s*GB/i)?.[0] + '/Día' : '1 GB/Día') : undefined,
           fupPolicy: isUnlimited ? (r.fup_policy || '512 Kbps') : undefined,
           fupSpeedThrottling: isUnlimited ? (r.fup_policy || '512 Kbps') : undefined,
-          fupResetInterval: isUnlimited ? 'Cada 24 horas (00:00 UTC)' : undefined,
+          fupResetInterval: isUnlimited ? 'Cada jornada (24h)' : undefined,
         };
       });
       return { total: plans.length, plans };

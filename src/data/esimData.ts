@@ -346,8 +346,8 @@ export const DEMO_USER_ESIMS: Record<string, UserEsim[]> = {
       fupPolicy: '1 Mbps',
       fupDailyAllowance: '2 GB/Día',
       fupSpeedThrottling: '1 Mbps',
-      fupResetInterval: 'Cada 24 horas (00:00 UTC)',
-      coverageDetails: 'FUP: 2 GB/Día a máxima velocidad 5G/4G por día. Al superarlo, datos ilimitados a velocidad reducida de 1 Mbps hasta el reseteo automático a las 00:00 UTC.'
+      fupResetInterval: 'Cada jornada (24h)',
+      coverageDetails: 'FUP: 2 GB/Día a máxima velocidad 5G/4G por día. Al superarlo, datos ilimitados a velocidad continua de 1 Mbps hasta la siguiente jornada.'
     }
   ]
 };
@@ -732,11 +732,11 @@ export const ESIM_PLANS: Record<string, EsimPlan[]> = {
       apn: 'globaldata',
       voiceAndSms: false,
       tetheringSupported: true,
-      coverageDetails: 'FUP: 3 GB/Día a máxima velocidad 5G/4G por día. Al superarlo, datos ilimitados a velocidad reducida de 1 Mbps hasta el reseteo automático a las 00:00 UTC.',
+      coverageDetails: 'FUP: 3 GB/Día a máxima velocidad 5G/4G por día. Al superarlo, datos ilimitados a velocidad continua de 1 Mbps hasta la siguiente jornada.',
       fupPolicy: '1 Mbps',
       fupDailyAllowance: '3 GB/Día',
       fupSpeedThrottling: '1 Mbps',
-      fupResetInterval: 'Cada 24 horas (00:00 UTC)'
+      fupResetInterval: 'Cada jornada (24h)'
     }
   ],
   US: [
@@ -1024,11 +1024,11 @@ export const ESIM_PLANS: Record<string, EsimPlan[]> = {
       apn: 'internet.ais',
       voiceAndSms: false,
       tetheringSupported: true,
-      coverageDetails: 'FUP: 2 GB/Día a máxima velocidad 5G/4G por día. Al superarlo, datos ilimitados a velocidad reducida de 1 Mbps hasta el reseteo automático a las 00:00 UTC.',
+      coverageDetails: 'FUP: 2 GB/Día a máxima velocidad 5G/4G por día. Al superarlo, datos ilimitados a velocidad continua de 1 Mbps hasta la siguiente jornada.',
       fupPolicy: '1 Mbps',
       fupDailyAllowance: '2 GB/Día',
       fupSpeedThrottling: '1 Mbps',
-      fupResetInterval: 'Cada 24 horas (00:00 UTC)',
+      fupResetInterval: 'Cada jornada (24h)',
       popular: true
     }
   ],

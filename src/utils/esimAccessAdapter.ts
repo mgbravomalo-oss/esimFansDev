@@ -116,6 +116,7 @@ export function transformEsimAccessToPlan(
     const match = raw.dataDisplay.match(/([\d.]+)\s*GB/i);
     if (match) dataAmountGB = parseFloat(match[1]);
   }
+  dataAmountGB = Math.round(dataAmountGB * 100) / 100;
 
   // 2. Operators list
   let operatorsStr = 'Principales redes locales 5G / 4G';
@@ -171,13 +172,13 @@ export function transformEsimAccessToPlan(
     tetheringSupported: true,
     voiceAndSms: raw.voiceStatus !== 'No soportado' && (raw.smsStatus ?? 2) !== 2,
     coverageDetails: isUnlimited && raw.fupPolicy
-      ? `FUP: ${raw.dataDisplay || `${dataAmountGB} GB/Día`} a máxima velocidad 5G/4G por día. Al superarlo, datos ilimitados a velocidad reducida de ${raw.fupPolicy} hasta el reseteo automático a las 00:00 UTC.`
+      ? `FUP: ${raw.dataDisplay || `${dataAmountGB} GB/Día`} a máxima velocidad 5G/4G por día. Al superarlo, datos ilimitados a velocidad continua de ${raw.fupPolicy} hasta la siguiente jornada. Sin suscripciones.`
       : (raw.fupPolicy || raw.activationPolicy || 'Conexión automática a la red de destino al aterrizar.'),
     popular: Boolean(raw.favorite),
     fupPolicy: raw.fupPolicy || (isUnlimited ? '512 Kbps' : undefined),
     fupDailyAllowance: isUnlimited ? (raw.dataDisplay || `${dataAmountGB} GB/Día`) : undefined,
     fupSpeedThrottling: raw.fupPolicy || (isUnlimited ? '512 Kbps' : undefined),
-    fupResetInterval: isUnlimited ? 'Cada 24 horas (00:00 UTC)' : 'Vigencia del paquete',
+    fupResetInterval: isUnlimited ? 'Cada jornada (24h)' : 'Vigencia del paquete',
   };
 }
 

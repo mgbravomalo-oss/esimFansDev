@@ -552,7 +552,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                               </span>
                             ) : (
                               <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
-                                {simPlan.dataAmountGB} GB
+                                {Math.round((simPlan.dataAmountGB || 0) * 100) / 100} GB
                               </span>
                             )}
                           </div>
@@ -739,13 +739,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <span>{plan.isUnlimited ? 'Política de Uso Justo (FUP)' : 'Especificaciones de Datos'}</span>
                 </span>
                 <span className="text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-400">
-                  {plan.isUnlimited ? 'Sin Cortes' : `${plan.dataAmountGB} GB / ${duration} días`}
+                  {plan.isUnlimited ? 'Sin Cortes' : `${Math.round((plan.dataAmountGB || 0) * 100) / 100} GB / ${duration} días`}
                 </span>
               </div>
               <div className="text-[11px] text-slate-500 dark:text-slate-400">
                 {plan.isUnlimited
                   ? `Cuota de ${plan.fupDailyAllowance || '1 GB /Día'} a máxima velocidad 5G, navegación continua garantizada a ${plan.fupSpeedThrottling || '512 Kbps'} tras cuota.`
-                  : `Bolsa de ${plan.dataAmountGB} GB de navegación 5G/4G válida durante ${duration} días a partir de la instalación.`}
+                  : `Bolsa de ${Math.round((plan.dataAmountGB || 0) * 100) / 100} GB de navegación 5G/4G válida durante ${duration} días a partir de la instalación.`}
               </div>
             </div>
 
@@ -869,7 +869,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               ) : !user ? (
                 <>
                   <UserCheck className="w-4 h-4 text-white" />
-                  <span>Identifícate / Valida tu usuario para continuar</span>
+                  <span>Valida tu usuario para continuar</span>
                 </>
               ) : (
                 <>

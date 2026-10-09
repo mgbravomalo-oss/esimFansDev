@@ -293,6 +293,7 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
   const [destinationPlans, setDestinationPlans] = useState<EsimPlan[]>([]);
   const [isLoadingPlans, setIsLoadingPlans] = useState<boolean>(false);
   const [selectedPlanFilter, setSelectedPlanFilter] = useState<'all' | 'unlimited' | 'standard' | 'high_data'>('all');
+  const [activeFupTooltipPlanId, setActiveFupTooltipPlanId] = useState<string | null>(null);
 
   // Multi-country coverage state in modal
   const [showCountriesList, setShowCountriesList] = useState<boolean>(true);
@@ -1544,76 +1545,117 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
                   No hay planes en este filtro para este destino.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {filteredModalPlans.map((plan) => (
-                    <div
-                      key={plan.id}
-                      className={`border rounded-xl p-3.5 flex flex-col justify-between transition-all ${
-                        plan.isUnlimited
-                          ? 'border-emerald-500 bg-gradient-to-b from-emerald-50/40 dark:from-emerald-950/40 to-white dark:to-slate-900 shadow-xs'
-                          : plan.popular
-                          ? 'border-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/20 shadow-xs'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900'
-                      }`}
-                    >
-                      <div>
-                        {/* Top Header Row with Title and Badge (Flex layout prevents overlapping) */}
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <div className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 min-w-0">
-                            {plan.isUnlimited ? (
-                              <>
-                                <InfinityIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                <span className="text-emerald-800 dark:text-emerald-300 font-extrabold text-sm truncate">Datos Ilimitados</span>
-                              </>
-                            ) : (
-                              <span className="text-sm">{plan.dataAmountGB} GB</span>
-                            )}
-                          </div>
+                <>
+                  {/* Informative banner for Unlimited plans so it's explained once clearly */}
+                  {filteredModalPlans.some((p) => p.isUnlimited) && (
+                    <div className="mb-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-2.5 text-[11px] text-emerald-900 dark:text-emerald-300">
+                      <InfinityIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                      <div className="leading-snug">
+                        <span className="font-bold">Garantía de Conexión Continua:</span> Disfrutas de datos ilimitados durante los días contratados. Cuentas con alta velocidad 5G cada jornada; si la superas, sigues conectado sin corte a velocidad continua hasta el día siguiente. Al finalizar tu viaje vence el plan sin suscripciones ni cobros automáticos.
+                      </div>
+                    </div>
+                  )}
 
-                          <div className="flex items-center gap-1 shrink-0">
-                            {plan.isUnlimited && (
-                              <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-700 text-white shadow-2xs flex items-center gap-0.5 tracking-tight uppercase">
-                                <InfinityIcon className="w-2.5 h-2.5" /> Ilimitado
-                              </span>
-                            )}
-                            {plan.popular && !plan.isUnlimited && (
-                              <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-600 text-white shadow-2xs tracking-tight uppercase">
-                                Popular
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="text-xs text-slate-600 dark:text-slate-300 font-medium line-clamp-1">
-                          {plan.name}
-                        </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                          {plan.isUnlimited
-                            ? `Precio base por día (elige tus días) • Red ${plan.operator}`
-                            : `Válido por ${plan.validityDays} días • Red ${plan.operator}`}
-                        </div>
-
-                        {/* FUP Specifications Breakdown for Unlimited Plans */}
-                        {plan.isUnlimited && (
-                          <div className="mt-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] space-y-1.5">
-                            <div className="flex items-center justify-between font-semibold text-emerald-900 dark:text-emerald-300">
-                              <span className="flex items-center gap-1">
-                                <Zap className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                                <span>Cuota 5G: <strong>{plan.fupDailyAllowance || `${plan.dataAmountGB === 999 ? '1 GB' : plan.dataAmountGB} /Día`}</strong></span>
-                              </span>
-                              <span className="text-[10px] px-1.5 py-0.5 bg-emerald-600/20 text-emerald-800 dark:text-emerald-300 rounded font-mono font-bold">
-                                FUP {plan.fupSpeedThrottling || plan.fupPolicy || '512 Kbps'}
-                              </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {filteredModalPlans.map((plan) => (
+                      <div
+                        key={plan.id}
+                        className={`border rounded-xl p-3.5 flex flex-col justify-between transition-all ${
+                          plan.isUnlimited
+                            ? 'border-emerald-500 bg-gradient-to-b from-emerald-50/40 dark:from-emerald-950/40 to-white dark:to-slate-900 shadow-xs'
+                            : plan.popular
+                            ? 'border-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/20 shadow-xs'
+                            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900'
+                        }`}
+                      >
+                        <div>
+                          {/* Top Header Row with Title and Badge (Flex layout prevents overlapping) */}
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <div className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 min-w-0">
+                              {plan.isUnlimited ? (
+                                <>
+                                  <InfinityIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  <span className="text-emerald-800 dark:text-emerald-300 font-extrabold text-sm truncate">Datos Ilimitados</span>
+                                </>
+                              ) : (
+                                <span className="text-sm">{Math.round((plan.dataAmountGB || 0) * 100) / 100} GB</span>
+                              )}
                             </div>
-                            <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                              <RotateCcw className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                              <span>Reinicio 5G: {plan.fupResetInterval || 'Cada 24 horas (00:00 UTC)'}</span>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              {plan.isUnlimited && (
+                                <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-700 text-white shadow-2xs flex items-center gap-0.5 tracking-tight uppercase">
+                                  <InfinityIcon className="w-2.5 h-2.5" /> Ilimitado
+                                </span>
+                              )}
+                              {plan.popular && !plan.isUnlimited && (
+                                <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-600 text-white shadow-2xs tracking-tight uppercase">
+                                  Popular
+                                </span>
+                              )}
                             </div>
-                            <p className="text-[10px] text-emerald-800/80 dark:text-emerald-300/80 leading-tight pt-0.5 border-t border-emerald-500/20">
-                              <strong>¿Qué es FUP?</strong> Datos 100% ilimitados. Navegas a máxima velocidad 5G hasta tu cuota diaria; si la superas, sigues conectado sin corte a {plan.fupSpeedThrottling || plan.fupPolicy ? `${plan.fupSpeedThrottling || plan.fupPolicy}` : 'velocidad limitada'} hasta el reinicio nocturno.
-                            </p>
                           </div>
-                        )}
+
+                          <div className="text-xs text-slate-600 dark:text-slate-300 font-medium line-clamp-1">
+                            {plan.name}
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            {plan.isUnlimited
+                              ? `Precio base por día (elige tus días) • Red ${plan.operator}`
+                              : `Válido por ${plan.validityDays} días • Red ${plan.operator}`}
+                          </div>
+
+                          {/* FUP Specifications Breakdown for Unlimited Plans */}
+                          {plan.isUnlimited && (
+                            <div className="mt-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] space-y-1.5">
+                              <div className="flex items-center justify-between font-semibold text-emerald-900 dark:text-emerald-300">
+                                <span className="flex items-center gap-1">
+                                  <Zap className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                  <span>Cuota 5G: <strong>{plan.fupDailyAllowance || `${plan.dataAmountGB === 999 ? '1 GB' : Math.round((plan.dataAmountGB || 0) * 100) / 100} /Día`}</strong></span>
+                                </span>
+                                <span className="text-[10px] px-1.5 py-0.5 bg-emerald-600/20 text-emerald-800 dark:text-emerald-300 rounded font-medium">
+                                  Sin corte ({plan.fupSpeedThrottling || plan.fupPolicy || '512 Kbps'})
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between text-[10px] pt-1 border-t border-emerald-500/15">
+                                <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                  <RotateCcw className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                                  <span>Alta velocidad: Se restablece cada jornada</span>
+                                </span>
+
+                                {/* Tooltip interactivo para explicar FUP sin sobrecargar la tarjeta */}
+                                <div className="relative inline-flex items-center">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveFupTooltipPlanId(activeFupTooltipPlanId === plan.id ? null : plan.id);
+                                    }}
+                                    onMouseEnter={() => setActiveFupTooltipPlanId(plan.id)}
+                                    onMouseLeave={() => setActiveFupTooltipPlanId((prev) => (prev === plan.id ? null : prev))}
+                                    className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 flex items-center gap-0.5 cursor-pointer underline-offset-2 hover:underline focus:outline-none"
+                                    title="Ver detalles de la política FUP"
+                                  >
+                                    <span>¿Qué es FUP?</span>
+                                    <Info className="w-3 h-3" />
+                                  </button>
+
+                                  {activeFupTooltipPlanId === plan.id && (
+                                    <div className="absolute bottom-full right-0 mb-1.5 w-72 p-2.5 bg-slate-900 text-slate-100 text-[10.5px] rounded-lg shadow-xl z-30 leading-snug animate-in fade-in zoom-in-95 pointer-events-none">
+                                      <p className="font-bold text-emerald-400 mb-0.5 flex items-center gap-1">
+                                        <InfinityIcon className="w-3 h-3" /> Política de Uso Justo (FUP)
+                                      </p>
+                                      <p className="text-slate-200">
+                                        Datos ilimitados durante la vigencia de tu plan. Cuentas con cuota diaria en 5G (<strong>{plan.fupDailyAllowance || '1 GB /Día'}</strong>). Si la consumes antes de terminar la jornada, no te quedas sin conexión: sigues navegando sin corte a velocidad continua (<strong>{plan.fupSpeedThrottling || plan.fupPolicy || '512 Kbps'}</strong>) hasta la siguiente jornada. Al vencer los días contratados, el plan finaliza sin suscripciones.
+                                      </p>
+                                      <div className="absolute top-full right-3 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-900" />
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
 
                         <div className="mt-2.5 space-y-1 text-[11px] text-slate-600 dark:text-slate-400">
                           {isMultiCountryDestination && (
@@ -1677,7 +1719,8 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
                     </div>
                   ))}
                 </div>
-              )}
+              </>
+            )}
             </div>
           </div>
         </div>
