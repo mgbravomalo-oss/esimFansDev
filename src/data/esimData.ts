@@ -555,6 +555,22 @@ export const DESTINATIONS: Destination[] = [
     isMultiCountry: false,
     coveredCountriesCount: 1,
     coveredCountries: [{ code: 'VE', name: 'Venezuela', flag: '🇻🇪', operators: ['Digitel'] }],
+  },
+  {
+    id: 'dest-oceania-8',
+    name: 'Oceanía (Australia y Nueva Zelanda)',
+    code: 'AUNZ-2',
+    flag: '🦘',
+    region: 'oceania',
+    regionLabel: 'Oceanía',
+    startingPriceEUR: 2.04,
+    popular: true,
+    popularBadge: 'Oceanía 5G',
+    topOperators: ['Telstra', 'Optus', 'Spark', 'One NZ'],
+    plansCount: 11,
+    isMultiCountry: true,
+    coveredCountriesCount: 8,
+    coveredCountries: OCEANIA_8_COUNTRIES,
   }
 ];
 

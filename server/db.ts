@@ -4,7 +4,7 @@ import path from 'path';
 import mongoose, { Schema, Model } from 'mongoose';
 import { d1Client } from './d1Client.js';
 import { resolveDeviceByEid } from './esimAccess.js';
-import { DESTINATIONS as FALLBACK_DESTINATIONS, ESIM_PLANS as FALLBACK_PLANS, DEMO_USERS as FALLBACK_USERS, DEMO_USER_ESIMS as FALLBACK_USER_ESIMS, COMPATIBLE_DEVICES as FALLBACK_COMPATIBLE_DEVICES } from '../src/data/esimData.js';
+import { DESTINATIONS as FALLBACK_DESTINATIONS, ESIM_PLANS as FALLBACK_PLANS, DEMO_USERS as FALLBACK_USERS, DEMO_USER_ESIMS as FALLBACK_USER_ESIMS, COMPATIBLE_DEVICES as FALLBACK_COMPATIBLE_DEVICES, OCEANIA_8_COUNTRIES } from '../src/data/esimData.js';
 import { Destination, EsimPlan, User, UserEsim, CompatibleDevice } from '../src/types';
 
 mongoose.set('bufferCommands', false);
@@ -38,7 +38,7 @@ export const SPANISH_COUNTRY_NAMES: Record<string, string> = {
   CM: 'Camerún', MU: 'Mauricio', SC: 'Seychelles', ET: 'Etiopía', JO: 'Jordania',
   LB: 'Líbano', OM: 'Omán', BH: 'Baréin', IQ: 'Irak', FJ: 'Fiyi', PF: 'Polinesia Francesa',
   'EU-33': 'Europa (33 Países)', 'GL-139': 'Global (139 Países)',
-  'OCE-8': 'Oceanía (8 Países)', 'AUNZ-2': 'Australia y Nueva Zelanda',
+  'OCE-8': 'Oceanía (8 Países)', 'AUNZ-2': 'Oceanía (Australia y Nueva Zelanda)',
 };
 
 export function isDatabaseConnected(): boolean {
@@ -114,7 +114,7 @@ const DB_CONFIG_JSON_FILE = path.resolve(process.cwd(), 'database_config.json');
 
 function updateJsonConfig(updates: Partial<{ activeProvider: DatabaseProvider; dualWriteEnabled: boolean }>): void {
   try {
-    let currentConfig: any = { activeProvider: 'd1', dualWriteEnabled: false };
+    let currentConfig: any = { activeProvider: 'mongo', dualWriteEnabled: false };
     if (fs.existsSync(DB_CONFIG_JSON_FILE)) {
       try {
         currentConfig = JSON.parse(fs.readFileSync(DB_CONFIG_JSON_FILE, 'utf-8'));
@@ -304,6 +304,7 @@ export function getCountryFlag(countryCode?: string): string {
   const code = countryCode.toUpperCase().trim();
   if (code === 'EU' || code === 'EUR' || code.startsWith('EU-')) return '🇪🇺';
   if (code === 'GLOBAL' || code === 'GL' || code === 'WORLD' || code.startsWith('GL-')) return '🌐';
+  if (code === 'OCE-8' || code === 'AUNZ-2' || code.startsWith('OCE-') || code.startsWith('AUNZ')) return '🦘';
   if (code.length !== 2) return '🌐';
   try {
     const codePoints = [...code].map(c => 0x1F1E6 + c.charCodeAt(0) - 65);
@@ -526,9 +527,16 @@ async function queryMongoDestinations(): Promise<Destination[]> {
               operators: getCountryTopOperators(cleanCode),
             };
           });
+        } else if (code === 'AUNZ-2' || code === 'OCE-8' || code.startsWith('OCE')) {
+          coveredCountries = OCEANIA_8_COUNTRIES.map(c => ({
+            code: c.code,
+            name: c.name,
+            flag: c.flag || getCountryFlag(c.code),
+            operators: c.operators || getCountryTopOperators(c.code),
+          }));
         }
 
-        const POPULAR_DESTS = ['US', 'ES', 'JP', 'FR', 'IT', 'DE', 'GB', 'TR', 'TH', 'MX', 'CO', 'VE', 'RO', 'EU', 'GL'];
+        const POPULAR_DESTS = ['US', 'ES', 'JP', 'FR', 'IT', 'DE', 'GB', 'TR', 'TH', 'MX', 'CO', 'VE', 'RO', 'EU', 'GL', 'AUNZ-2', 'OCE-8', 'AU'];
         const isPopular = POPULAR_DESTS.includes(code);
 
         return {
@@ -540,7 +548,7 @@ async function queryMongoDestinations(): Promise<Destination[]> {
           regionLabel: resolveRegionLabel(code),
           startingPriceEUR: Number((g.minPrice || g.minBasePrice || 3.9).toFixed(2)),
           popular: isPopular,
-          popularBadge: code === 'RO' ? 'Europa' : (['US', 'ES', 'JP'].includes(code) ? 'Top Destino' : (isMulti ? 'Multi-país' : undefined)),
+          popularBadge: code === 'RO' ? 'Europa' : (code === 'AUNZ-2' || code === 'OCE-8' ? 'Oceanía 5G' : (['US', 'ES', 'JP'].includes(code) ? 'Top Destino' : (isMulti ? 'Multi-país' : undefined))),
           topOperators: operators.slice(0, 4),
           plansCount: g.planCount || 1,
           isMultiCountry: isMulti,
@@ -689,11 +697,18 @@ async function queryMongoPlans(rawCode: string, search: string, filter: any): Pr
   try {
     const query: any = {};
     if (rawCode) {
-      query.$or = [
-        { locationCode: rawCode },
-        { 'rawSource.locationCode': rawCode },
-        { 'rawSource.location': rawCode },
-      ];
+      if (rawCode === 'OCE-8' || rawCode === 'OCE') {
+        query.$or = [
+          { locationCode: { $in: ['OCE-8', 'AUNZ-2', 'AU', 'NZ'] } },
+          { 'rawSource.locationCode': { $in: ['OCE-8', 'AUNZ-2', 'AU', 'NZ'] } },
+        ];
+      } else {
+        query.$or = [
+          { locationCode: rawCode },
+          { 'rawSource.locationCode': rawCode },
+          { 'rawSource.location': rawCode },
+        ];
+      }
     }
     if (search) {
       const sRegex = new RegExp(search, 'i');

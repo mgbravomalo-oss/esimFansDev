@@ -614,7 +614,15 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
 
         if (selectedRegion === 'global') {
           // Paquetes globales y multipaís (incluye Oceanía 8 áreas, Global 139, Europa 33, etc.)
-          if (destReg !== 'global' && !dest.isMultiCountry) return false;
+          const isGlobalOrMulti =
+            destReg === 'global' ||
+            dest.isMultiCountry ||
+            dest.code.startsWith('GL') ||
+            dest.code.startsWith('OCE') ||
+            dest.code.startsWith('AUNZ') ||
+            dest.code.startsWith('EU-') ||
+            /global|ocean[ií]a|europa/i.test(dest.name);
+          if (!isGlobalOrMulti) return false;
         } else if (selectedRegion === 'oceania') {
           const isOceania =
             destReg === 'oceania' ||
@@ -992,7 +1000,7 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
 
       {/* Region Filter Chips (Hidden on mobile when focused search is active) */}
       <div className={`space-y-3 ${isMobileSearchActive ? 'hidden md:block' : 'block'}`}>
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+        <div className="flex flex-wrap items-center gap-2 pb-1">
           <button
             onClick={() => handleSelectRegion('all')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
@@ -1029,6 +1037,18 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
             🇪🇺 Europa
           </button>
           <button
+            onClick={() => handleSelectRegion('americas')}
+            onMouseEnter={() => handleRegionHover('americas')}
+            onTouchStart={() => handleRegionHover('americas')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+              selectedRegion === 'americas'
+                ? 'bg-slate-900 dark:bg-emerald-600 text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            🌎 América
+          </button>
+          <button
             onClick={() => handleSelectRegion('asia')}
             onMouseEnter={() => handleRegionHover('asia')}
             onTouchStart={() => handleRegionHover('asia')}
@@ -1041,16 +1061,16 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
             🇯🇵 Asia
           </button>
           <button
-            onClick={() => handleSelectRegion('americas')}
-            onMouseEnter={() => handleRegionHover('americas')}
-            onTouchStart={() => handleRegionHover('americas')}
+            onClick={() => handleSelectRegion('oceania')}
+            onMouseEnter={() => handleRegionHover('oceania')}
+            onTouchStart={() => handleRegionHover('oceania')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
-              selectedRegion === 'americas'
+              selectedRegion === 'oceania'
                 ? 'bg-slate-900 dark:bg-emerald-600 text-white shadow-xs'
                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
             }`}
           >
-            🌎 América
+            🦘 Oceanía
           </button>
           <button
             onClick={() => handleSelectRegion('middle_east')}
@@ -1071,18 +1091,6 @@ export const DestinationsCatalog: React.FC<DestinationsCatalogProps> = ({
             }`}
           >
             🌍 África
-          </button>
-          <button
-            onClick={() => handleSelectRegion('oceania')}
-            onMouseEnter={() => handleRegionHover('oceania')}
-            onTouchStart={() => handleRegionHover('oceania')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
-              selectedRegion === 'oceania'
-                ? 'bg-slate-900 dark:bg-emerald-600 text-white shadow-xs'
-                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
-            }`}
-          >
-            🦘 Oceanía
           </button>
           <button
             onClick={() => handleSelectRegion('global')}
