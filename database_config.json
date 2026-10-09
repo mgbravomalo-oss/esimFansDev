@@ -1,5 +1,5 @@
 {
-  "activeProvider": "d1",
+  "activeProvider": "mongo",
   "dualWriteEnabled": false,
-  "updatedAt": "2026-10-04T20:59:55.849Z"
+  "updatedAt": "2026-10-09T20:14:21.340Z"
 }

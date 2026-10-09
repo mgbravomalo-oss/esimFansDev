@@ -108,6 +108,18 @@ function resolveRegionLabel(code: string): string {
 
 export type DatabaseProvider = 'mongo' | 'd1';
 
+export function parseProviderValue(val?: any): DatabaseProvider | null {
+  if (!val || typeof val !== 'string') return null;
+  const cleaned = val.trim().toLowerCase().replace(/['"]/g, '');
+  if (['mongo', 'mongodb', 'atlas', 'mongoose'].includes(cleaned)) {
+    return 'mongo';
+  }
+  if (['d1', 'cloudflare', 'cloudflare_d1', 'sqlite'].includes(cleaned)) {
+    return 'd1';
+  }
+  return null;
+}
+
 const DB_PROVIDER_STATE_FILE = path.resolve(process.cwd(), '.active_db_provider');
 const DUAL_WRITE_STATE_FILE = path.resolve(process.cwd(), '.dual_write_enabled');
 const DB_CONFIG_JSON_FILE = path.resolve(process.cwd(), 'database_config.json');
@@ -126,26 +138,32 @@ function updateJsonConfig(updates: Partial<{ activeProvider: DatabaseProvider; d
 }
 
 function loadPersistedProvider(): DatabaseProvider {
+  // 1. ENVIRONMENT VARIABLES ALWAYS TAKE SUPREME PRECEDENCE (Vercel / Cloud Run / Production)
+  const envVal = parseProviderValue(
+    process.env.ACTIVE_DB_PROVIDER ||
+    process.env.DATABASE_PROVIDER ||
+    process.env.DB_PROVIDER
+  );
+  if (envVal) {
+    return envVal;
+  }
+
+  // 2. Persisted files on disk (for local development persistence)
   try {
     if (fs.existsSync(DB_PROVIDER_STATE_FILE)) {
-      const val = fs.readFileSync(DB_PROVIDER_STATE_FILE, 'utf-8').trim().toLowerCase();
-      if (val === 'd1' || val === 'mongo') {
-        return val as DatabaseProvider;
-      }
+      const fileVal = parseProviderValue(fs.readFileSync(DB_PROVIDER_STATE_FILE, 'utf-8'));
+      if (fileVal) return fileVal;
     }
     if (fs.existsSync(DB_CONFIG_JSON_FILE)) {
       const parsed = JSON.parse(fs.readFileSync(DB_CONFIG_JSON_FILE, 'utf-8'));
-      if (parsed.activeProvider === 'd1' || parsed.activeProvider === 'mongo') {
-        return parsed.activeProvider;
-      }
+      const parsedVal = parseProviderValue(parsed?.activeProvider);
+      if (parsedVal) return parsedVal;
     }
   } catch {
     // Ignore read errors
   }
-  const envVal = (process.env.ACTIVE_DB_PROVIDER || process.env.DATABASE_PROVIDER || '').trim().toLowerCase();
-  if (envVal === 'd1' || envVal === 'mongo') {
-    return envVal as DatabaseProvider;
-  }
+
+  // 3. Absolute default is always 'mongo' (MongoDB Atlas)
   return 'mongo';
 }
 
@@ -203,18 +221,27 @@ export function setDualWriteEnabled(enabled: boolean): void {
 }
 
 export function getActiveDatabaseProvider(): DatabaseProvider {
-  if (activeDatabaseProvider === 'd1' && d1Client.isQuotaExceeded()) {
+  // Check runtime environment variable first (Vercel / Cloud Run overrides)
+  const envProvider = parseProviderValue(
+    process.env.ACTIVE_DB_PROVIDER ||
+    process.env.DATABASE_PROVIDER ||
+    process.env.DB_PROVIDER
+  );
+  const current = envProvider || activeDatabaseProvider || 'mongo';
+
+  if (current === 'd1' && d1Client.isQuotaExceeded()) {
     return 'mongo';
   }
-  return activeDatabaseProvider;
+  return current;
 }
 
 export function setActiveDatabaseProvider(provider: DatabaseProvider): void {
-  if (provider === 'mongo' || provider === 'd1') {
-    activeDatabaseProvider = provider;
-    savePersistedProvider(provider);
+  const parsed = parseProviderValue(provider);
+  if (parsed) {
+    activeDatabaseProvider = parsed;
+    savePersistedProvider(parsed);
     invalidateServerCatalogCache();
-    console.log(`🔄 [Database Switch] Proveedor de base de datos cambiado a: ${provider.toUpperCase()} (Guardado persistentemente)`);
+    console.log(`🔄 [Database Switch] Proveedor de base de datos cambiado a: ${parsed.toUpperCase()} (Guardado persistentemente)`);
   }
 }
 
@@ -284,7 +311,7 @@ export async function getDatabaseStatus(): Promise<any> {
   return {
     isConnected: forcedConnected,
     state: forcedConnected ? 'connected' : 'disconnected',
-    activeProvider: activeDatabaseProvider,
+    activeProvider: getActiveDatabaseProvider(),
     dualWriteEnabled: isDualWriteEnabled(),
     availableProviders: {
       mongo: isMongoConnected,

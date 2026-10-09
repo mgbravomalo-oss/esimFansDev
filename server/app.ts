@@ -593,6 +593,8 @@ app.get('/api/db/status', async (_req: Request, res: Response) => {
     diagnostics: {
       isVercel: Boolean(process.env.VERCEL),
       nodeEnv: process.env.NODE_ENV,
+      configuredProviderEnv: process.env.ACTIVE_DB_PROVIDER || process.env.DATABASE_PROVIDER || null,
+      effectiveProvider: status.activeProvider,
       uriDetectedPrefix: uriPrefix,
       uriLength: rawUri.length,
       dbNameEnv: process.env.MONGODB_DB_NAME || '(determinado por URI o por defecto)',
@@ -600,7 +602,7 @@ app.get('/api/db/status', async (_req: Request, res: Response) => {
       lastError: status.error || null,
     },
     message: status.isConnected
-      ? `Conectado exitosamente a MongoDB Atlas (Base de datos "${status.databaseName}", colección "${status.collectionName || 'plans'}"). ${status.totalPlans} planes eSIM y ${status.totalDestinations} destinos disponibles.`
+      ? `Conectado exitosamente (${status.databaseName}). ${status.totalPlans} planes eSIM y ${status.totalDestinations} destinos disponibles.`
       : (status.error ? `Error al conectar: ${status.error}` : 'Variable MONGODB_URI no detectada o inválida.'),
   });
 });
