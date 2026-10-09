@@ -20,6 +20,7 @@ export const AiTravelAdvisorModal: React.FC<AiTravelAdvisorModalProps> = ({
   const [usageType, setUsageType] = useState<'light' | 'standard' | 'heavy'>('standard');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ destination?: string; days?: string }>({});
+  const [apiError, setApiError] = useState<string | null>(null);
   const [recommendation, setRecommendation] = useState<TravelRecommendation | null>(null);
   const [clarification, setClarification] = useState<AiClarification | null>(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -38,11 +39,11 @@ export const AiTravelAdvisorModal: React.FC<AiTravelAdvisorModalProps> = ({
 
   useEffect(() => {
     if (!isOffline && waitingDestination) {
+      const target = waitingDestination;
       setWaitingDestination(null);
-      setLoading(true);
-      executeRecommendation(waitingDestination);
+      executeRecommendation(target);
     }
-  }, [isOffline, waitingDestination]);
+  }, [isOffline]);
 
   if (!isOpen) return null;
 
@@ -69,6 +70,7 @@ export const AiTravelAdvisorModal: React.FC<AiTravelAdvisorModalProps> = ({
     }
 
     setErrors({});
+    setApiError(null);
 
     if (isOffline) {
       setWaitingDestination(cleanDest);
@@ -76,9 +78,11 @@ export const AiTravelAdvisorModal: React.FC<AiTravelAdvisorModalProps> = ({
     }
 
     setLoading(true);
-    let shouldKeepLoadingForConnection = false;
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
       const res = await fetch('/api/ai/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -86,8 +90,11 @@ export const AiTravelAdvisorModal: React.FC<AiTravelAdvisorModalProps> = ({
           destination: cleanDest,
           days: daysInput,
           usage: usageType
-        })
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+
       const data = await res.json();
       if (data.success) {
         if (data.needsClarification && data.clarification) {
@@ -102,13 +109,16 @@ export const AiTravelAdvisorModal: React.FC<AiTravelAdvisorModalProps> = ({
       } else {
         throw new Error(data.error || 'Fallo en la consulta');
       }
-    } catch {
-      setWaitingDestination(cleanDest);
-      shouldKeepLoadingForConnection = true;
-    } finally {
-      if (!shouldKeepLoadingForConnection) {
-        setLoading(false);
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        setApiError('La consulta tardó más de lo esperado. Por favor reintenta la búsqueda.');
+      } else if (!navigator.onLine) {
+        setWaitingDestination(cleanDest);
+      } else {
+        setApiError(err.message || 'No fue posible conectar con el asistente IA. Inténtalo de nuevo.');
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -158,18 +168,16 @@ export const AiTravelAdvisorModal: React.FC<AiTravelAdvisorModalProps> = ({
               </div>
             )}
 
-            {waitingDestination && (
-              <button
-                type="button"
-                onClick={() => {
-                  setWaitingDestination(null);
-                  setLoading(false);
-                }}
-                className="mt-6 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
-              >
-                Cancelar búsqueda
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                setWaitingDestination(null);
+                setLoading(false);
+              }}
+              className="mt-6 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
           </div>
         )}
 
@@ -198,6 +206,32 @@ export const AiTravelAdvisorModal: React.FC<AiTravelAdvisorModalProps> = ({
         </div>
 
         <div className="py-4 space-y-4 overflow-y-auto pr-1 flex-1 text-xs">
+          {/* General API Error Banner */}
+          {apiError && !loading && (
+            <div className="p-3.5 rounded-2xl bg-rose-50/90 dark:bg-rose-950/40 border border-rose-300/80 dark:border-rose-700/60 space-y-2 animate-fade-in shadow-xs">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-bold text-xs text-rose-950 dark:text-rose-200 block mb-0.5">
+                    No se pudo completar la consulta
+                  </span>
+                  <p className="text-xs text-rose-900 dark:text-rose-100 leading-relaxed font-medium">
+                    {apiError}
+                  </p>
+                </div>
+              </div>
+              <div className="pt-2 border-t border-rose-200/70 dark:border-rose-800/40 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => executeRecommendation()}
+                  className="text-xs font-bold px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors cursor-pointer"
+                >
+                  Reintentar consulta →
+                </button>
+              </div>
+            </div>
+          )}
+
           {!recommendation ? (
             <form noValidate onSubmit={handleGetRecommendation} className="space-y-3.5">
               {/* Interactive AI Clarification / Reprompt Card */}

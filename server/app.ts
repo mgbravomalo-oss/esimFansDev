@@ -90,8 +90,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   // 1. Validación de Origen Permitido
   const origin = req.headers.origin || req.headers.referer;
+  const host = req.headers.host;
   if (origin && typeof origin === 'string') {
-    if (!isOriginAllowed(origin)) {
+    if (!isOriginAllowed(origin, host)) {
       console.warn(`🛡️ [Security CORS Block] Origen no autorizado intentó acceder: "${origin}" (${req.method} ${req.url})`);
       return res.status(403).json({
         success: false,
@@ -1820,12 +1821,12 @@ INSTRUCCIONES CLAVE:
 6. Usa formato Markdown limpio con negritas y listas breves.`;
 
         const aiPromise = ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-3.1-flash-lite',
           contents: prompt,
         });
 
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('AI timeout')), 12000)
+          setTimeout(() => reject(new Error('AI timeout')), 6000)
         );
 
         const response: any = await Promise.race([aiPromise, timeoutPromise]);
@@ -5049,13 +5050,13 @@ Responde estrictamente en formato JSON con la siguiente estructura:
 }`;
 
       const aiPromise = ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-3.1-flash-lite',
         contents: prompt,
         config: { responseMimeType: 'application/json' },
       });
 
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('AI timeout')), 2200)
+        setTimeout(() => reject(new Error('AI timeout')), 4500)
       );
 
       const response: any = await Promise.race([aiPromise, timeoutPromise]);
@@ -5269,9 +5270,9 @@ Responde en JSON conciso:
   "tips": ["Consejo 1 de roaming/datos", "Consejo 2 de cobertura y transición entre países", "Consejo 3 práctico de viaje"]
 }`;
 
-        // Fast call with 2.5s maximum timeout
+        // Fast call with 4.5s maximum timeout
         const aiPromise = ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-3.1-flash-lite',
           contents: prompt,
           config: {
             responseMimeType: 'application/json',
@@ -5279,7 +5280,7 @@ Responde en JSON conciso:
         });
 
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('AI timeout')), 2800)
+          setTimeout(() => reject(new Error('AI timeout')), 4500)
         );
 
         const response: any = await Promise.race([aiPromise, timeoutPromise]);
