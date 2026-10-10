@@ -33,12 +33,15 @@ import {
   UserEsimModel,
   AtlasCustomerModel,
   AtlasOrderModel,
+  PurchaseAuditLogModel,
   createOrderInDb,
   getOrdersFromDb,
   getOrderByIdFromDb,
   updateOrderInDb,
   deleteOrderFromDb,
   deleteUserEsimFromDb,
+  deleteUserEsimsFromDb,
+  deletePurchaseAuditLogsFromDb,
   inMemoryOrders,
   SPANISH_COUNTRY_NAMES,
   createPurchaseAuditLog,
@@ -2638,8 +2641,15 @@ app.post('/api/orders/:orderId/reject', requireAdmin, async (req: AuthenticatedR
 // DELETE /api/orders/:orderId - Delete an order (and associated test eSIM if any)
 app.delete(['/api/orders/:orderId', '/api/admin/orders/:orderId'], async (req: Request, res: Response) => {
   try {
-    const { orderId } = req.params;
+    let { orderId } = req.params;
     const adminEmail = (req.body?.adminEmail || req.query?.adminEmail || req.headers['x-admin-email'] || '') as string;
+
+    const queryOrderNumber = (req.query?.orderNumber || req.body?.orderNumber || '') as string;
+    const queryOrderId = (req.query?.orderId || req.body?.orderId || '') as string;
+
+    if (!orderId || orderId === 'undefined' || orderId === 'null') {
+      orderId = queryOrderNumber || queryOrderId || '';
+    }
 
     if (adminEmail && !isUserAdmin(adminEmail)) {
       return res.status(403).json({ success: false, error: 'Solo administradores pueden eliminar pedidos' });
@@ -2648,8 +2658,8 @@ app.delete(['/api/orders/:orderId', '/api/admin/orders/:orderId'], async (req: R
     const orderToDelete = await getOrderByIdFromDb(orderId);
     
     // Resolve identifiers
-    const resolvedOrderNumber = orderToDelete?.orderNumber || (orderId.startsWith('WPA-') || orderId.startsWith('ORD-') ? orderId : undefined);
-    const resolvedOrderId = orderToDelete?.id || orderId;
+    const resolvedOrderNumber = orderToDelete?.orderNumber || queryOrderNumber || (orderId.startsWith('WPA-') || orderId.startsWith('ORD-') ? orderId : undefined);
+    const resolvedOrderId = orderToDelete?.id || (orderId !== resolvedOrderNumber ? orderId : undefined) || queryOrderId;
     const resolvedIccid = orderToDelete?.generatedEsim?.iccid || orderToDelete?.iccid;
     const resolvedEsimId = orderToDelete?.generatedEsim?.id || orderToDelete?.esimId;
     const userEmail = orderToDelete?.userEmail;
@@ -2714,12 +2724,15 @@ app.delete(['/api/orders/:orderId', '/api/admin/orders/:orderId'], async (req: R
 
         // 4. Clean up audit logs
         if (resolvedOrderNumber || resolvedOrderId) {
-          await PurchaseAuditLogModel.deleteMany({
-            $or: [
-              ...(resolvedOrderNumber ? [{ orderNumber: resolvedOrderNumber }, { orderNo: resolvedOrderNumber }] : []),
-              ...(resolvedOrderId ? [{ orderId: resolvedOrderId }] : [])
-            ]
-          });
+          await deletePurchaseAuditLogsFromDb(resolvedOrderNumber, resolvedOrderId);
+          if (PurchaseAuditLogModel) {
+            await PurchaseAuditLogModel.deleteMany({
+              $or: [
+                ...(resolvedOrderNumber ? [{ orderNumber: resolvedOrderNumber }, { orderNo: resolvedOrderNumber }] : []),
+                ...(resolvedOrderId ? [{ orderId: resolvedOrderId }] : [])
+              ]
+            });
+          }
         }
       } catch (err: any) {
         console.warn('⚠️ Error en cascade cleanup de orden:', err?.message || err);

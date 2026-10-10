@@ -1374,6 +1374,9 @@ export const inMemoryOrders: any[] = [
 ];
 
 export async function createOrderInDb(d: any): Promise<any> {
+  if (!d.id) {
+    d.id = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  }
   inMemoryOrders.unshift(d);
   const provider = getActiveDatabaseProvider();
   const dual = isDualWriteEnabled();
@@ -1514,7 +1517,10 @@ export async function getOrdersFromDb(filter?: any): Promise<any[]> {
       }
       const docs = await AtlasOrderModel.find(query).sort({ createdAt: -1 }).lean();
       if (docs && docs.length > 0) {
-        return docs;
+        return docs.map((d: any) => ({
+          ...d,
+          id: d.id || d._id?.toString() || d.orderNumber,
+        }));
       }
     }
   } catch (err) {}
@@ -1711,6 +1717,49 @@ export async function createPurchaseAuditLog(p: any): Promise<any> {
 }
 
 export async function appendPurchaseAuditStep(_logId: string, _stepData: any): Promise<void> {}
+
+export async function deletePurchaseAuditLogsFromDb(orderNumber?: string, orderId?: string): Promise<void> {
+  const cleanNum = orderNumber ? String(orderNumber).trim() : '';
+  const cleanId = orderId ? String(orderId).trim() : '';
+  if (!cleanNum && !cleanId) return;
+
+  const provider = getActiveDatabaseProvider();
+  const dual = isDualWriteEnabled();
+
+  if (provider === 'd1' || dual) {
+    try {
+      if (d1Client.isConfigured()) {
+        if (cleanNum) {
+          await d1Client.query('DELETE FROM purchase_audit_logs WHERE order_number = ?', [cleanNum]);
+        }
+        if (cleanId) {
+          await d1Client.query('DELETE FROM purchase_audit_logs WHERE id = ?', [cleanId]);
+        }
+      }
+    } catch (err: any) {
+      console.warn('⚠️ Error deleting purchase audit logs from D1:', err?.message || err);
+    }
+  }
+
+  if (provider === 'mongo' || dual) {
+    try {
+      if (mongoose.connection.readyState === mongoose.ConnectionStates.connected) {
+        const conds: any[] = [];
+        if (cleanNum) {
+          conds.push({ orderNumber: cleanNum }, { orderNo: cleanNum }, { order_number: cleanNum });
+        }
+        if (cleanId) {
+          conds.push({ orderId: cleanId }, { id: cleanId });
+        }
+        if (conds.length > 0) {
+          await PurchaseAuditLogModel.deleteMany({ $or: conds });
+        }
+      }
+    } catch (err: any) {
+      console.warn('⚠️ Error deleting purchase audit logs from MongoDB:', err?.message || err);
+    }
+  }
+}
 
 export async function getRecentPurchaseAuditLogs(_limit?: number): Promise<any[]> {
   const provider = getActiveDatabaseProvider();

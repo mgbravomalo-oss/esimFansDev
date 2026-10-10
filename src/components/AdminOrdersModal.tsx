@@ -71,7 +71,10 @@ export const AdminOrdersModal: React.FC<AdminOrdersModalProps> = ({
       if (ordersRes.ok) {
         const oData = await ordersRes.json();
         if (oData.success && Array.isArray(oData.orders)) {
-          setOrders(oData.orders);
+          setOrders(oData.orders.map((o: any) => ({
+            ...o,
+            id: o.id || o._id || o.orderNumber,
+          })));
         }
       }
     } catch (err: any) {
@@ -219,22 +222,25 @@ export const AdminOrdersModal: React.FC<AdminOrdersModalProps> = ({
       return;
     }
 
-    setActionInProgressId(order.id);
+    const effectiveId = order.id && order.id !== 'undefined' ? order.id : ((order as any)._id || order.orderNumber);
+    setActionInProgressId(effectiveId);
     setActionFeedback(null);
     try {
-      const res = await fetch(`/api/orders/${order.id}`, {
+      const res = await fetch(`/api/orders/${encodeURIComponent(effectiveId)}?adminEmail=${encodeURIComponent(currentUser?.email || 'mgbravomalo@gmail.com')}&orderNumber=${encodeURIComponent(order.orderNumber)}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           adminEmail: currentUser?.email || 'mgbravomalo@gmail.com',
+          orderNumber: order.orderNumber,
+          orderId: effectiveId,
         }),
       });
 
       const data = await res.json();
       if (data.success || res.status === 404) {
         setActionFeedback(`🗑️ Pedido ${order.orderNumber} y perfil asociado eliminados con éxito.`);
-        setOrders(prev => prev.filter(o => o.id !== order.id && o.orderNumber !== order.orderNumber && (o as any)._id !== order.id));
-        realtimeSync.broadcastLocalDelete(order.id);
+        setOrders(prev => prev.filter(o => o.id !== effectiveId && o.orderNumber !== order.orderNumber && (o as any)._id !== effectiveId));
+        realtimeSync.broadcastLocalDelete(effectiveId);
         window.dispatchEvent(new CustomEvent('app:order_approved_refresh'));
       } else {
         setActionFeedback(`❌ Error al eliminar: ${data.error}`);

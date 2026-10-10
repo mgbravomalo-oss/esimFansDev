@@ -318,7 +318,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.orders)) {
-          setOrders(data.orders);
+          setOrders(data.orders.map((o: any) => ({
+            ...o,
+            id: o.id || o._id || o.orderNumber,
+          })));
         }
       }
     } catch (err: any) {
@@ -570,13 +573,15 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   // --------------------------------------------------
 
   const handleApproveOrder = async (orderId: string, orderNumber: string) => {
-    setActionInProgressId(orderId);
+    const effectiveId = orderId && orderId !== 'undefined' ? orderId : (orderNumber || '');
+    setActionInProgressId(effectiveId);
     try {
-      const res = await fetch(`/api/orders/${orderId}/approve`, {
+      const res = await fetch(`/api/orders/${encodeURIComponent(effectiveId)}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           adminEmail,
+          orderNumber,
           forceWholesaler: !isTestMode,
         }),
       });
@@ -587,11 +592,11 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
         
         // Update local orders list
         setOrders(prev =>
-          prev.map(o => (o.id === orderId ? { ...o, status: 'approved', generatedEsim: data.esim } : o))
+          prev.map(o => (o.id === effectiveId || o.orderNumber === orderNumber || (o as any)._id === effectiveId ? { ...o, status: 'approved', generatedEsim: data.esim } : o))
         );
 
         // Notify other windows/tabs in real-time
-        realtimeSync.broadcastLocalApproval(data.order || { id: orderId }, data.esim);
+        realtimeSync.broadcastLocalApproval(data.order || { id: effectiveId, orderNumber }, data.esim);
 
         if (onRefreshGlobal) onRefreshGlobal();
       } else {
@@ -605,14 +610,16 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   };
 
   const handleRejectOrder = async (orderId: string, orderNumber: string, reason: string) => {
+    const effectiveId = orderId && orderId !== 'undefined' ? orderId : (orderNumber || '');
     const finalReason = reason.trim() || 'Rechazado manualmente en panel de pruebas';
-    setActionInProgressId(orderId);
+    setActionInProgressId(effectiveId);
     try {
-      const res = await fetch(`/api/orders/${orderId}/reject`, {
+      const res = await fetch(`/api/orders/${encodeURIComponent(effectiveId)}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           adminEmail,
+          orderNumber,
           reason: finalReason,
         }),
       });
@@ -623,7 +630,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
         
         // Update local orders list
         setOrders(prev =>
-          prev.map(o => (o.id === orderId ? { ...o, status: 'rejected', rejectionReason: finalReason } : o))
+          prev.map(o => (o.id === effectiveId || o.orderNumber === orderNumber || (o as any)._id === effectiveId ? { ...o, status: 'rejected', rejectionReason: finalReason } : o))
         );
 
         if (onRefreshGlobal) onRefreshGlobal();
@@ -640,17 +647,25 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   };
 
   const handleDeleteOrder = async (orderId: string, orderNumber: string) => {
-    setActionInProgressId(orderId);
+    const effectiveId = orderId && orderId !== 'undefined' ? orderId : (orderNumber || '');
+    setActionInProgressId(effectiveId);
     try {
-      const res = await fetch(`/api/orders/${orderId}?adminEmail=${encodeURIComponent(adminEmail)}`, {
+      const res = await fetch(`/api/orders/${encodeURIComponent(effectiveId)}?adminEmail=${encodeURIComponent(adminEmail)}&orderNumber=${encodeURIComponent(orderNumber || '')}`, {
         method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminEmail,
+          orderNumber,
+          orderId: effectiveId,
+        }),
       });
 
       const data = await res.json();
       if (data.success || res.status === 404) {
-        showFeedback(`🗑️ Pedido #${orderNumber || orderId} eliminado permanentemente.`);
-        setOrders(prev => prev.filter(o => o.id !== orderId && o.orderNumber !== orderNumber && (o as any)._id !== orderId));
-        setEsims(prev => prev.filter(e => (e as any).orderNumber !== orderNumber && (e as any).orderId !== orderId && (e as any).orderNo !== orderNumber));
+        showFeedback(`🗑️ Pedido #${orderNumber || effectiveId} eliminado permanentemente.`);
+        setOrders(prev => prev.filter(o => o.id !== effectiveId && o.orderNumber !== orderNumber && (o as any)._id !== effectiveId));
+        setEsims(prev => prev.filter(e => (e as any).orderNumber !== orderNumber && (e as any).orderId !== effectiveId && (e as any).orderNo !== orderNumber));
+        realtimeSync.broadcastLocalDelete(effectiveId);
         if (onRefreshGlobal) onRefreshGlobal();
       } else {
         showFeedback(data.error || 'Error al eliminar el pedido.', 'error');
@@ -1648,9 +1663,11 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             </div>
           ) : (
             <div className="space-y-3.5">
-              {filteredOrders.map((order) => (
+              {filteredOrders.map((order) => {
+                const currentOrderId = order.id || (order as any)._id || order.orderNumber;
+                return (
                 <div
-                  key={order.id}
+                  key={currentOrderId}
                   className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-3xs space-y-3"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800/60">
@@ -1744,7 +1761,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/40">
                     
                     {/* Deletion inline confirm */}
-                    {confirmingDeleteOrderId === order.id ? (
+                    {confirmingDeleteOrderId === currentOrderId ? (
                       <div className="flex items-center gap-2 p-1.5 px-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-800 dark:text-rose-300 animate-fade-in mr-auto">
                         <span className="text-[11px] font-bold">¿Eliminar registro permanentemente?</span>
                         <button
@@ -1755,7 +1772,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                         </button>
                         <button
                           disabled={actionInProgressId !== null}
-                          onClick={() => handleDeleteOrder(order.id, order.orderNumber)}
+                          onClick={() => handleDeleteOrder(currentOrderId, order.orderNumber)}
                           className="px-2.5 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold"
                         >
                           Sí, eliminar
@@ -1764,7 +1781,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                     ) : (
                       <button
                         disabled={actionInProgressId !== null}
-                        onClick={() => setConfirmingDeleteOrderId(order.id)}
+                        onClick={() => setConfirmingDeleteOrderId(currentOrderId)}
                         className="p-1.5 px-2.5 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-xs font-bold transition-all mr-auto flex items-center gap-1"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1776,7 +1793,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                     {order.status === 'pending_approval' && (
                       <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                         
-                        {rejectingOrderId === order.id ? (
+                        {rejectingOrderId === currentOrderId ? (
                           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full animate-fade-in">
                             <input
                               type="text"
@@ -1798,7 +1815,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                               </button>
                               <button
                                 disabled={actionInProgressId !== null}
-                                onClick={() => handleRejectOrder(order.id, order.orderNumber, rejectionReasonInput)}
+                                onClick={() => handleRejectOrder(currentOrderId, order.orderNumber, rejectionReasonInput)}
                                 className="px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold"
                               >
                                 Rechazar
@@ -1810,7 +1827,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                             <button
                               disabled={actionInProgressId !== null}
                               onClick={() => {
-                                setRejectingOrderId(order.id);
+                                setRejectingOrderId(currentOrderId);
                                 setRejectionReasonInput('Transacción de prueba rechazada por el administrador');
                               }}
                               className="px-3.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold transition-all flex items-center gap-1 shrink-0"
@@ -1821,10 +1838,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 
                             <button
                               disabled={actionInProgressId !== null}
-                              onClick={() => handleApproveOrder(order.id, order.orderNumber)}
+                              onClick={() => handleApproveOrder(currentOrderId, order.orderNumber)}
                               className="px-4 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-850 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white text-xs font-bold shadow-2xs transition-all flex items-center gap-1 shrink-0"
                             >
-                              {actionInProgressId === order.id ? (
+                              {actionInProgressId === currentOrderId ? (
                                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                               ) : (
                                 <CheckCircle className="w-3.5 h-3.5" />
@@ -1838,7 +1855,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                     )}
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
           )}
         </div>
