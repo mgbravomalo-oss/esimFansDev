@@ -647,9 +647,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
       });
 
       const data = await res.json();
-      if (data.success) {
-        showFeedback(`🗑️ Pedido #${orderNumber} eliminado permanentemente.`);
-        setOrders(prev => prev.filter(o => o.id !== orderId));
+      if (data.success || res.status === 404) {
+        showFeedback(`🗑️ Pedido #${orderNumber || orderId} eliminado permanentemente.`);
+        setOrders(prev => prev.filter(o => o.id !== orderId && o.orderNumber !== orderNumber && (o as any)._id !== orderId));
+        setEsims(prev => prev.filter(e => (e as any).orderNumber !== orderNumber && (e as any).orderId !== orderId && (e as any).orderNo !== orderNumber));
         if (onRefreshGlobal) onRefreshGlobal();
       } else {
         showFeedback(data.error || 'Error al eliminar el pedido.', 'error');

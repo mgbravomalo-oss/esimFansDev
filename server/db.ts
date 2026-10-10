@@ -1526,12 +1526,34 @@ export async function getOrdersFromDb(filter?: any): Promise<any[]> {
 }
 
 export async function getOrderByIdFromDb(id: string): Promise<any> {
+  const cleanId = String(id).trim();
   const all = await getOrdersFromDb({ isAdmin: true });
-  return all.find(o => o.id === id || o.orderNumber === id) || null;
+  const found = all.find(o => 
+    o.id === cleanId || 
+    o.orderNumber === cleanId || 
+    (o as any)._id?.toString() === cleanId
+  );
+  if (found) return found;
+
+  // Direct MongoDB fallback check if not in cached array
+  try {
+    if (mongoose.connection.readyState === mongoose.ConnectionStates.connected) {
+      const mongoOr: any[] = [{ id: cleanId }, { orderNumber: cleanId }];
+      if (mongoose.Types.ObjectId.isValid(cleanId)) {
+        mongoOr.push({ _id: new mongoose.Types.ObjectId(cleanId) });
+        mongoOr.push({ _id: cleanId });
+      }
+      const doc = await AtlasOrderModel.findOne({ $or: mongoOr }).lean();
+      if (doc) return doc;
+    }
+  } catch {}
+
+  return null;
 }
 
 export async function updateOrderInDb(id: string, updates: any): Promise<any> {
-  const idx = inMemoryOrders.findIndex(o => o.id === id || o.orderNumber === id);
+  const cleanId = String(id).trim();
+  const idx = inMemoryOrders.findIndex(o => o.id === cleanId || o.orderNumber === cleanId || (o as any)._id?.toString() === cleanId);
   if (idx !== -1) {
     inMemoryOrders[idx] = { ...inMemoryOrders[idx], ...updates };
   }
@@ -1544,8 +1566,8 @@ export async function updateOrderInDb(id: string, updates: any): Promise<any> {
       if (d1Client.isConfigured() && updates.status) {
         await d1Client.query('UPDATE orders SET status = ?, updated_at = datetime("now") WHERE id = ? OR order_number = ?', [
           updates.status,
-          id,
-          id,
+          cleanId,
+          cleanId,
         ]);
       }
     } catch {}
@@ -1554,7 +1576,12 @@ export async function updateOrderInDb(id: string, updates: any): Promise<any> {
   if (provider === 'mongo' || dual) {
     try {
       if (mongoose.connection.readyState === mongoose.ConnectionStates.connected) {
-        await AtlasOrderModel.updateOne({ $or: [{ id }, { orderNumber: id }] }, { $set: updates });
+        const mongoOr: any[] = [{ id: cleanId }, { orderNumber: cleanId }];
+        if (mongoose.Types.ObjectId.isValid(cleanId)) {
+          mongoOr.push({ _id: new mongoose.Types.ObjectId(cleanId) });
+          mongoOr.push({ _id: cleanId });
+        }
+        await AtlasOrderModel.updateOne({ $or: mongoOr }, { $set: updates });
       }
     } catch {}
   }
@@ -1563,7 +1590,8 @@ export async function updateOrderInDb(id: string, updates: any): Promise<any> {
 }
 
 export async function deleteOrderFromDb(id: string): Promise<boolean> {
-  const idx = inMemoryOrders.findIndex(o => o.id === id || o.orderNumber === id);
+  const cleanId = String(id).trim();
+  const idx = inMemoryOrders.findIndex(o => o.id === cleanId || o.orderNumber === cleanId || (o as any)._id?.toString() === cleanId);
   if (idx !== -1) inMemoryOrders.splice(idx, 1);
 
   const provider = getActiveDatabaseProvider();
@@ -1572,40 +1600,70 @@ export async function deleteOrderFromDb(id: string): Promise<boolean> {
   if (provider === 'd1' || dual) {
     try {
       if (d1Client.isConfigured()) {
-        await d1Client.query('DELETE FROM orders WHERE id = ? OR order_number = ?', [id, id]);
+        await d1Client.query('DELETE FROM orders WHERE id = ? OR order_number = ?', [cleanId, cleanId]);
       }
-    } catch {}
+    } catch (err: any) {
+      console.warn('⚠️ Error deleting order from D1:', err?.message || err);
+    }
   }
 
   if (provider === 'mongo' || dual) {
     try {
       if (mongoose.connection.readyState === mongoose.ConnectionStates.connected) {
-        await AtlasOrderModel.deleteOne({ $or: [{ id }, { orderNumber: id }] });
+        const mongoOr: any[] = [{ id: cleanId }, { orderNumber: cleanId }];
+        if (mongoose.Types.ObjectId.isValid(cleanId)) {
+          mongoOr.push({ _id: new mongoose.Types.ObjectId(cleanId) });
+          mongoOr.push({ _id: cleanId });
+        }
+        await AtlasOrderModel.deleteMany({ $or: mongoOr });
       }
-    } catch {}
+    } catch (err: any) {
+      console.warn('⚠️ Error deleting order from MongoDB:', err?.message || err);
+    }
   }
 
   return true;
 }
 
 export async function deleteUserEsimsFromDb(idOrIccid: string): Promise<boolean> {
+  const cleanId = String(idOrIccid).trim();
   const provider = getActiveDatabaseProvider();
   const dual = isDualWriteEnabled();
 
   if (provider === 'd1' || dual) {
     try {
       if (d1Client.isConfigured()) {
-        await d1Client.query('DELETE FROM user_esims WHERE id = ? OR iccid = ?', [idOrIccid, idOrIccid]);
+        await d1Client.query('DELETE FROM user_esims WHERE id = ? OR iccid = ?', [cleanId, cleanId]);
       }
-    } catch {}
+    } catch (err: any) {
+      console.warn('⚠️ Error deleting user esim from D1:', err?.message || err);
+    }
   }
 
   if (provider === 'mongo' || dual) {
     try {
       if (mongoose.connection.readyState === mongoose.ConnectionStates.connected) {
-        await UserEsimModel.deleteOne({ $or: [{ id: idOrIccid }, { iccid: idOrIccid }] });
+        const mongoOr: any[] = [{ id: cleanId }, { iccid: cleanId }];
+        if (mongoose.Types.ObjectId.isValid(cleanId)) {
+          mongoOr.push({ _id: new mongoose.Types.ObjectId(cleanId) });
+          mongoOr.push({ _id: cleanId });
+        }
+        await UserEsimModel.deleteMany({ $or: mongoOr });
+
+        // Limpiar también de los clientes registrados (activeEsims y purchases)
+        await AtlasCustomerModel.updateMany(
+          {},
+          {
+            $pull: {
+              activeEsims: { $or: [{ id: cleanId }, { iccid: cleanId }] },
+              purchases: { $or: [{ iccid: cleanId }, { orderId: cleanId }] }
+            } as any
+          }
+        );
       }
-    } catch {}
+    } catch (err: any) {
+      console.warn('⚠️ Error deleting user esim from MongoDB:', err?.message || err);
+    }
   }
 
   return true;

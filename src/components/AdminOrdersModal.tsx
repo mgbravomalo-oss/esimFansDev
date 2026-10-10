@@ -231,9 +231,9 @@ export const AdminOrdersModal: React.FC<AdminOrdersModalProps> = ({
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (data.success || res.status === 404) {
         setActionFeedback(`🗑️ Pedido ${order.orderNumber} y perfil asociado eliminados con éxito.`);
-        setOrders(prev => prev.filter(o => o.id !== order.id && o.orderNumber !== order.orderNumber));
+        setOrders(prev => prev.filter(o => o.id !== order.id && o.orderNumber !== order.orderNumber && (o as any)._id !== order.id));
         realtimeSync.broadcastLocalDelete(order.id);
         window.dispatchEvent(new CustomEvent('app:order_approved_refresh'));
       } else {

@@ -2639,33 +2639,120 @@ app.post('/api/orders/:orderId/reject', requireAdmin, async (req: AuthenticatedR
 app.delete(['/api/orders/:orderId', '/api/admin/orders/:orderId'], async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
-    const adminEmail = (req.body?.adminEmail || req.query?.adminEmail || '') as string;
+    const adminEmail = (req.body?.adminEmail || req.query?.adminEmail || req.headers['x-admin-email'] || '') as string;
 
     if (adminEmail && !isUserAdmin(adminEmail)) {
       return res.status(403).json({ success: false, error: 'Solo administradores pueden eliminar pedidos' });
     }
 
     const orderToDelete = await getOrderByIdFromDb(orderId);
-    const deleted = await deleteOrderFromDb(orderId);
+    
+    // Resolve identifiers
+    const resolvedOrderNumber = orderToDelete?.orderNumber || (orderId.startsWith('WPA-') || orderId.startsWith('ORD-') ? orderId : undefined);
+    const resolvedOrderId = orderToDelete?.id || orderId;
+    const resolvedIccid = orderToDelete?.generatedEsim?.iccid || orderToDelete?.iccid;
+    const resolvedEsimId = orderToDelete?.generatedEsim?.id || orderToDelete?.esimId;
+    const userEmail = orderToDelete?.userEmail;
 
-    if (!deleted && !orderToDelete) {
-      return res.status(404).json({ success: false, error: 'Pedido no encontrado' });
+    // 1. Delete order from DB (Mongo / D1 / memory)
+    await deleteOrderFromDb(orderId);
+    if (resolvedOrderNumber && resolvedOrderNumber !== orderId) {
+      await deleteOrderFromDb(resolvedOrderNumber);
+    }
+    if (resolvedOrderId && resolvedOrderId !== orderId) {
+      await deleteOrderFromDb(resolvedOrderId);
     }
 
-    console.log(`🗑️ [Admin Orders] Pedido ${orderToDelete?.orderNumber || orderId} eliminado con éxito.`);
+    // 2. Cascade delete associated eSIM so it ceases to show as active
+    if (resolvedIccid) {
+      await deleteUserEsimsFromDb(resolvedIccid);
+    }
+    if (resolvedEsimId) {
+      await deleteUserEsimsFromDb(resolvedEsimId);
+    }
+    if (resolvedOrderNumber) {
+      if (isDatabaseConnected()) {
+        try {
+          await UserEsimModel.deleteMany({
+            $or: [
+              { orderNumber: resolvedOrderNumber },
+              { orderNo: resolvedOrderNumber }
+            ]
+          });
+        } catch {}
+      }
+    }
+
+    // 3. Cascade pull from customer records (activeEsims and purchases)
+    if (isDatabaseConnected()) {
+      try {
+        const pullConds: any[] = [];
+        if (resolvedOrderNumber) {
+          pullConds.push({ orderNumber: resolvedOrderNumber }, { orderNo: resolvedOrderNumber }, { orderId: resolvedOrderNumber });
+        }
+        if (resolvedOrderId) {
+          pullConds.push({ orderId: resolvedOrderId });
+        }
+        if (resolvedIccid) {
+          pullConds.push({ iccid: resolvedIccid });
+        }
+        if (resolvedEsimId) {
+          pullConds.push({ id: resolvedEsimId });
+        }
+
+        if (pullConds.length > 0) {
+          await AtlasCustomerModel.updateMany(
+            {},
+            {
+              $pull: {
+                activeEsims: { $or: pullConds },
+                purchases: { $or: pullConds }
+              } as any
+            }
+          );
+        }
+
+        // 4. Clean up audit logs
+        if (resolvedOrderNumber || resolvedOrderId) {
+          await PurchaseAuditLogModel.deleteMany({
+            $or: [
+              ...(resolvedOrderNumber ? [{ orderNumber: resolvedOrderNumber }, { orderNo: resolvedOrderNumber }] : []),
+              ...(resolvedOrderId ? [{ orderId: resolvedOrderId }] : [])
+            ]
+          });
+        }
+      } catch (err: any) {
+        console.warn('⚠️ Error en cascade cleanup de orden:', err?.message || err);
+      }
+    }
+
+    console.log(`🗑️ [Admin Orders] Pedido ${resolvedOrderNumber || orderId} y recursos asociados eliminados con éxito.`);
 
     // Broadcast realtime delete event so all connected tabs/buyers immediately sync
     broadcastRealtimeEvent({
       type: 'order_deleted',
       order: orderToDelete,
-      orderNumber: orderToDelete?.orderNumber,
-      userEmail: orderToDelete?.userEmail,
+      orderId: resolvedOrderId,
+      orderNumber: resolvedOrderNumber || orderId,
+      userEmail,
+      iccid: resolvedIccid,
+      esimId: resolvedEsimId,
     });
+
+    if (resolvedIccid || resolvedEsimId) {
+      broadcastRealtimeEvent({
+        type: 'esim_deleted',
+        iccid: resolvedIccid,
+        esimId: resolvedEsimId,
+        userEmail,
+      });
+    }
 
     res.json({
       success: true,
-      message: `Pedido ${orderToDelete?.orderNumber || orderId} eliminado correctamente`,
+      message: `Pedido ${resolvedOrderNumber || orderId} y perfil asociado eliminados correctamente`,
       orderId,
+      orderNumber: resolvedOrderNumber,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });

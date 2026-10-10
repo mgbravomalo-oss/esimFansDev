@@ -190,7 +190,29 @@ export default function App() {
       fetchPendingOrdersCount();
     });
 
-    const unsubscribeDeleted = realtimeSync.onOrderDeleted(() => {
+    const unsubscribeDeleted = realtimeSync.onOrderDeleted((data?: any) => {
+      const deletedId = typeof data === 'string' ? data : data?.orderId || data?.id;
+      const deletedOrderNumber = typeof data === 'object' ? data?.orderNumber : undefined;
+      const deletedIccid = typeof data === 'object' ? data?.iccid : undefined;
+      const deletedEsimId = typeof data === 'object' ? data?.esimId : undefined;
+
+      setUserEsims(prev => {
+        const filtered = prev.filter(e => {
+          if (deletedIccid && e.iccid === deletedIccid) return false;
+          if (deletedEsimId && e.id === deletedEsimId) return false;
+          if (deletedId && (e.id === deletedId || (e as any).orderId === deletedId)) return false;
+          if (deletedOrderNumber && ((e as any).orderNumber === deletedOrderNumber || (e as any).orderNo === deletedOrderNumber)) return false;
+          return true;
+        });
+        const userKey = (user?.email || user?.id || '').toLowerCase();
+        if (userKey) {
+          try {
+            localStorage.setItem(`wappa_user_esims_${userKey}`, JSON.stringify(filtered));
+          } catch {}
+        }
+        return filtered;
+      });
+
       if (user) {
         fetchUserEsims(user, true);
       }

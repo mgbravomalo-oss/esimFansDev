@@ -10,7 +10,7 @@ import { Order, User, UserEsim } from '../types';
 
 type OrderApprovedCallback = (order: Order, esim: UserEsim) => void;
 type OrderCreatedCallback = (order: Order) => void;
-type OrderDeletedCallback = (orderId: string) => void;
+type OrderDeletedCallback = (data: any) => void;
 
 class RealtimeSyncManager {
   private eventSource: EventSource | null = null;
@@ -30,8 +30,8 @@ class RealtimeSyncManager {
             this.notifyApproval(data.order, data.esim);
           } else if (data?.type === 'order_created' && data.order) {
             this.notifyCreated(data.order);
-          } else if (data?.type === 'order_deleted' && data.orderId) {
-            this.notifyDeleted(data.orderId);
+          } else if (data?.type === 'order_deleted') {
+            this.notifyDeleted(data);
           }
         };
       } catch (e) {
@@ -67,7 +67,7 @@ class RealtimeSyncManager {
           } else if (data.type === 'order_created' && data.order) {
             this.notifyCreated(data.order);
           } else if (data.type === 'order_deleted') {
-            this.notifyDeleted(data.order?.id || data.orderNumber || '');
+            this.notifyDeleted(data);
           }
         } catch (err) {
           // JSON parse error or heartbeat
@@ -130,13 +130,14 @@ class RealtimeSyncManager {
     }
   }
 
-  public broadcastLocalDelete(orderId: string) {
-    this.notifyDeleted(orderId);
+  public broadcastLocalDelete(orderIdOrData: any) {
+    const payload = typeof orderIdOrData === 'string' ? { orderId: orderIdOrData } : orderIdOrData;
+    this.notifyDeleted(payload);
     if (this.broadcastChannel) {
       try {
         this.broadcastChannel.postMessage({
           type: 'order_deleted',
-          orderId,
+          ...payload,
         });
       } catch {}
     }
@@ -161,10 +162,10 @@ class RealtimeSyncManager {
     }
   }
 
-  private notifyDeleted(orderId: string) {
+  private notifyDeleted(data: any) {
     this.deletedCallbacks.forEach((cb) => {
       try {
-        cb(orderId);
+        cb(data);
       } catch (err) {
         console.warn('Error in order deleted callback:', err);
       }
@@ -173,7 +174,7 @@ class RealtimeSyncManager {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('app:order_deleted', {
-          detail: { orderId },
+          detail: typeof data === 'object' ? data : { orderId: data },
         })
       );
       window.dispatchEvent(new CustomEvent('app:order_approved_refresh'));
